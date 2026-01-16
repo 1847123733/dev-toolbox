@@ -28,6 +28,7 @@ interface CodeRunnerAPI {
     duration: number
   }>
   stop: () => void
+  killPort: (port: number) => Promise<{ success: boolean; message: string }>
 }
 
 interface NpmAPI {
