@@ -7,7 +7,7 @@ import type { CodeFile } from '../RunJS.vue'
 dayjs.extend(relativeTime)
 dayjs.locale('zh-cn')
 
-const props = defineProps<{
+defineProps<{
   files: CodeFile[]
   activeId: string
 }>()
