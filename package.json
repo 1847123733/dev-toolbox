@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "description": "开发者工具集合 - 包含代码运行器等实用工具",
   "main": "./out/main/index.js",
-  "author": "your-name",
-  "homepage": "https://github.com/your-username/dev-toolbox",
+  "author": {
+    "name": "linwan",
+    "email": "1847123733@qq.com"
+  },
+  "homepage": "https://github.com/1847123733/dev-toolbox",
   "productName": "开发者工具箱",
   "scripts": {
     "format": "prettier --write .",
