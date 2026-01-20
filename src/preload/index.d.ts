@@ -21,12 +21,23 @@ interface NpmAPI {
   uninstall: (packageName: string) => Promise<{ success: boolean; message: string }>
   list: () => Promise<InstalledPackage[]>
   versions: (packageName: string) => Promise<string[]>
-  changeVersion: (packageName: string, version: string) => Promise<{ success: boolean; message: string }>
+  changeVersion: (
+    packageName: string,
+    version: string
+  ) => Promise<{ success: boolean; message: string }>
   getDir: () => Promise<string>
   setDir: () => Promise<{ success: boolean; path?: string }>
   resetDir: () => Promise<{ success: boolean; path: string }>
   // 类型定义相关
-  getTypes: (packageName: string) => Promise<{ success: boolean; content?: string; version?: string }>
+  getTypes: (
+    packageName: string
+  ) => Promise<{
+    success: boolean
+    content?: string
+    files?: Record<string, string>
+    entry?: string
+    version?: string
+  }>
   clearTypeCache: (packageName: string) => Promise<void>
 }
 

@@ -1,13 +1,11 @@
 /**
  * NPM 包类型定义加载器
- * 仅加载通过 builtinTypes 定义的静态类型
  */
 
 import { monaco } from './monacoSetup'
-import { BUILTIN_TYPES } from './builtinTypes'
 
 // 类型加载状态
-export type TypeLoadStatus = 'loading' | 'local' | 'cdn' | 'builtin' | 'failed' | 'cached'
+export type TypeLoadStatus = 'loading' | 'local' | 'cdn' | 'failed' | 'cached'
 
 // 类型加载事件
 export interface TypeLoadEvent {
@@ -35,37 +33,42 @@ export function onTypeLoadStatusChange(listener: TypeLoadListener): () => void {
  * 通知所有监听器状态变化
  */
 function notifyStatusChange(event: TypeLoadEvent): void {
-  listeners.forEach(listener => listener(event))
+  listeners.forEach((listener) => listener(event))
 }
 
 // 已加载的类型定义缓存 (包名 -> 版本号)
 const loadedTypes = new Map<string, string>()
 
-// 自动注入 Node.js 类型
-if (BUILTIN_TYPES['node']) {
-  // 注入 @types/node
-  const nodeLibPath = 'file:///node_modules/@types/node/index.d.ts'
-  monaco.languages.typescript.typescriptDefaults.addExtraLib(BUILTIN_TYPES['node'], nodeLibPath)
-  monaco.languages.typescript.javascriptDefaults.addExtraLib(BUILTIN_TYPES['node'], nodeLibPath)
-  loadedTypes.set('@types/node', 'builtin')
-  loadedTypes.set('node', 'builtin')
-}
-
 /**
  * 将类型定义添加到 Monaco Editor
  */
-function addTypeToMonaco(packageName: string, content: string): void {
-  // 使用模拟的 node_modules 路径，这样 require('package') 才能正确解析
-  const libPath = `file:///node_modules/${packageName}/index.d.ts`
-  monaco.languages.typescript.typescriptDefaults.addExtraLib(content, libPath)
-  monaco.languages.typescript.javascriptDefaults.addExtraLib(content, libPath)
+function addTypeToMonaco(packageName: string, content: string | Record<string, string>): void {
+  if (typeof content === 'string') {
+    // 兼容旧模式
+    const libPath = `file:///node_modules/${packageName}/index.d.ts`
+    monaco.languages.typescript.typescriptDefaults.addExtraLib(content, libPath)
+    monaco.languages.typescript.javascriptDefaults.addExtraLib(content, libPath)
+  } else {
+    // 新模式：添加所有文件
+    Object.entries(content).forEach(([relPath, fileContent]) => {
+      // 确保路径以 / 开头
+      const normalizedPath = relPath.startsWith('/') ? relPath : `/${relPath}`
+      const libPath = `file:///node_modules/${packageName}${normalizedPath}`
+
+      monaco.languages.typescript.typescriptDefaults.addExtraLib(fileContent, libPath)
+      monaco.languages.typescript.javascriptDefaults.addExtraLib(fileContent, libPath)
+    })
+  }
 }
 
 /**
  * 加载单个包的类型定义
  * 优先级：1. 本地 node_modules 2. 内置类型
  */
-export async function loadTypeDefinition(packageName: string, forceReload = false): Promise<boolean> {
+export async function loadTypeDefinition(
+  packageName: string,
+  forceReload = false
+): Promise<boolean> {
   // 如果强制重新加载，先清除缓存
   if (forceReload) {
     loadedTypes.delete(packageName)
@@ -83,8 +86,8 @@ export async function loadTypeDefinition(packageName: string, forceReload = fals
   // 1. 优先从本地 node_modules 加载
   try {
     const localResult = await window.api.npm.getTypes(packageName)
-    if (localResult.success && localResult.content) {
-      addTypeToMonaco(packageName, localResult.content)
+    if (localResult.success && (localResult.files || localResult.content)) {
+      addTypeToMonaco(packageName, localResult.files || localResult.content!)
       loadedTypes.set(packageName, localResult.version || 'local')
       notifyStatusChange({ packageName, status: 'local', source: localResult.version })
       console.log(`[TypeLoader] ✓ Loaded local types for: ${packageName} (v${localResult.version})`)
@@ -92,16 +95,6 @@ export async function loadTypeDefinition(packageName: string, forceReload = fals
     }
   } catch (error) {
     console.log(`[TypeLoader] Local types not available for: ${packageName}`, error)
-  }
-
-  // 2. 回退到内置类型定义
-  const builtinType = BUILTIN_TYPES[packageName]
-  if (builtinType) {
-    addTypeToMonaco(packageName, builtinType)
-    loadedTypes.set(packageName, 'builtin')
-    notifyStatusChange({ packageName, status: 'builtin' })
-    console.log(`[TypeLoader] ✓ Loaded builtin types for: ${packageName}`)
-    return true
   }
 
   // 失败
@@ -136,7 +129,7 @@ export async function loadTypesForInstalledPackages(): Promise<void> {
     const batchSize = 3
     for (let i = 0; i < installedPackages.length; i += batchSize) {
       const batch = installedPackages.slice(i, i + batchSize)
-      await Promise.all(batch.map(pkg => loadTypeDefinition(pkg.name)))
+      await Promise.all(batch.map((pkg) => loadTypeDefinition(pkg.name)))
     }
 
     console.log(`[TypeLoader] Finished loading types for installed packages`)
@@ -157,9 +150,7 @@ export function extractPackageNames(code: string): string[] {
   while ((match = requireRegex.exec(code)) !== null) {
     const pkg = match[1]
     if (!pkg.startsWith('.') && !pkg.startsWith('/')) {
-      const pkgName = pkg.startsWith('@')
-        ? pkg.split('/').slice(0, 2).join('/')
-        : pkg.split('/')[0]
+      const pkgName = pkg.startsWith('@') ? pkg.split('/').slice(0, 2).join('/') : pkg.split('/')[0]
       packages.add(pkgName)
     }
   }
@@ -169,9 +160,7 @@ export function extractPackageNames(code: string): string[] {
   while ((match = importRegex.exec(code)) !== null) {
     const pkg = match[1]
     if (!pkg.startsWith('.') && !pkg.startsWith('/')) {
-      const pkgName = pkg.startsWith('@')
-        ? pkg.split('/').slice(0, 2).join('/')
-        : pkg.split('/')[0]
+      const pkgName = pkg.startsWith('@') ? pkg.split('/').slice(0, 2).join('/') : pkg.split('/')[0]
       packages.add(pkgName)
     }
   }
@@ -186,12 +175,12 @@ export async function loadTypesForCode(code: string): Promise<void> {
   const packages = extractPackageNames(code)
 
   // 过滤已加载的
-  const toLoad = packages.filter(pkg => !loadedTypes.has(pkg))
+  const toLoad = packages.filter((pkg) => !loadedTypes.has(pkg))
 
   if (toLoad.length === 0) return
 
   // 并行加载
-  await Promise.all(toLoad.map(pkg => loadTypeDefinition(pkg)))
+  await Promise.all(toLoad.map((pkg) => loadTypeDefinition(pkg)))
 }
 
 /**

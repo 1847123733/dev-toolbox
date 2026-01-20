@@ -146,15 +146,12 @@ function initInstalledPackages(): void {
     // 后台触发安装
     runNpmCommand(['install', 'express@^4.18.2', '--save'], getNpmDir())
       .then(() => console.log('Auto-installed express'))
-      .catch(err => console.error('Failed to auto-install express:', err))
+      .catch((err) => console.error('Failed to auto-install express:', err))
   }
 }
 
 // 执行 npm 命令
-function runNpmCommand(
-  args: string[],
-  cwd: string
-): Promise<{ success: boolean; output: string }> {
+function runNpmCommand(args: string[], cwd: string): Promise<{ success: boolean; output: string }> {
   return new Promise((resolve) => {
     const isWin = process.platform === 'win32'
     const npmCmd = isWin ? 'npm.cmd' : 'npm'
@@ -194,6 +191,17 @@ function runNpmCommand(
       resolve({ success: false, output: '安装超时' })
     }, 60000)
   })
+}
+
+// 获取对应的 @types 包名
+function getTypesPackageName(packageName: string): string {
+  if (packageName.startsWith('@')) {
+    const parts = packageName.slice(1).split('/', 2)
+    if (parts.length === 2) {
+      return `@types/${parts[0]}__${parts[1]}`
+    }
+  }
+  return `@types/${packageName}`
 }
 
 export function setupNpmManager(): void {
@@ -353,24 +361,20 @@ export function setupNpmManager(): void {
   })
 
   // 获取包的所有可用版本
-  ipcMain.handle(
-    'npm:versions',
-    async (_, packageName: string): Promise<string[]> => {
-      try {
-        const response = await axios.get(
-          `https://registry.npmmirror.com/${packageName}`,
-          { timeout: 15000 }
-        )
+  ipcMain.handle('npm:versions', async (_, packageName: string): Promise<string[]> => {
+    try {
+      const response = await axios.get(`https://registry.npmmirror.com/${packageName}`, {
+        timeout: 15000
+      })
 
-        const versions = Object.keys(response.data.versions || {})
-        // 按版本号排序（最新版本在前）
-        return versions.reverse() // 只返回最近50个版本
-      } catch (error) {
-        console.error('获取版本列表失败:', error)
-        return []
-      }
+      const versions = Object.keys(response.data.versions || {})
+      // 按版本号排序（最新版本在前）
+      return versions.reverse() // 只返回最近50个版本
+    } catch (error) {
+      console.error('获取版本列表失败:', error)
+      return []
     }
-  )
+  })
 
   // 切换包版本（卸载旧版本，安装新版本）
   ipcMain.handle(
@@ -424,7 +428,10 @@ export function setupNpmManager(): void {
   // 获取包的类型定义
   ipcMain.handle(
     'npm:getTypes',
-    async (_, packageName: string): Promise<{ success: boolean; content?: string; version?: string }> => {
+    async (
+      _,
+      packageName: string
+    ): Promise<{ success: boolean; content?: string; version?: string }> => {
       const npmDir = getNpmDir()
       const nodeModulesDir = path.join(npmDir, 'node_modules')
       const packageDir = path.join(nodeModulesDir, packageName)
@@ -467,31 +474,68 @@ export function setupNpmManager(): void {
 
         // 如果找不到类型定义，尝试查找 @types 包
         if (!typesPath) {
-          const atTypesDir = path.join(nodeModulesDir, '@types', packageName)
+          const typesPkgName = getTypesPackageName(packageName)
+          const typesDirName = typesPkgName.replace(/^@types\//, '')
+          const atTypesDir = path.join(nodeModulesDir, '@types', typesDirName)
+
+          // 如果 @types 包未安装，尝试自动安装
+          if (!fs.existsSync(atTypesDir)) {
+            // 避免处理 @types 包本身的类型查找（防止潜在的死循环）
+            if (!packageName.startsWith('@types/')) {
+              try {
+                console.log(`[NPM] Auto-installing types: ${typesPkgName}`)
+                // 自动安装 @types 包
+                const installResult = await runNpmCommand(
+                  ['install', typesPkgName, '--save'],
+                  npmDir
+                )
+                if (installResult.success) {
+                  console.log(`[NPM] Successfully installed ${typesPkgName}`)
+                  // 刷新安装列表
+                  installedPackages = getInstalledFromDisk()
+                } else {
+                  console.log(`[NPM] Failed to install ${typesPkgName} (might not exist)`)
+                }
+              } catch (e) {
+                console.error(`[NPM] Error during auto-install of ${typesPkgName}:`, e)
+              }
+            }
+          }
+
           if (fs.existsSync(atTypesDir)) {
             const atTypesPkgJson = path.join(atTypesDir, 'package.json')
             if (fs.existsSync(atTypesPkgJson)) {
-              const atTypesPkg = JSON.parse(fs.readFileSync(atTypesPkgJson, 'utf-8'))
-              typesPath = atTypesPkg.types || atTypesPkg.typings || 'index.d.ts'
-              // 切换到 @types 目录
-              const typesFullPath = path.join(atTypesDir, typesPath)
-              if (fs.existsSync(typesFullPath)) {
-                const content = readTypeFileWithDeps(atTypesDir, typesPath, new Set())
-                return { success: true, content, version }
+              try {
+                const atTypesPkg = JSON.parse(fs.readFileSync(atTypesPkgJson, 'utf-8'))
+                typesPath = atTypesPkg.types || atTypesPkg.typings || 'index.d.ts'
+                // 切换到 @types 目录
+                const typesFullPath = path.join(atTypesDir, typesPath)
+                if (fs.existsSync(typesFullPath)) {
+                  const files: Record<string, string> = {}
+                  collectTypeFiles(atTypesDir, typesPath, files, new Set())
+                  if (Object.keys(files).length > 0) {
+                    return { success: true, files, entry: typesPath, version }
+                  }
+                }
+              } catch (e) {
+                console.error(`[NPM] Error parsing package.json for ${atTypesDir}:`, e)
               }
             }
           }
           return { success: false }
         }
 
-        // 读取类型文件，包括其依赖的相对路径文件
-        const typesFullPath = path.join(packageDir, typesPath)
-        if (!fs.existsSync(typesFullPath)) {
-          return { success: false }
+        // 读取类型文件，收集所有相关文件
+        const files: Record<string, string> = {}
+        const entryPath = typesPath
+        collectTypeFiles(packageDir, entryPath, files, new Set())
+
+        // 如果找到了文件，则返回
+        if (Object.keys(files).length > 0) {
+          return { success: true, files, entry: entryPath, version }
         }
 
-        const content = readTypeFileWithDeps(packageDir, typesPath, new Set())
-        return { success: true, content, version }
+        return { success: false }
       } catch (error) {
         console.error(`Failed to read types for ${packageName}:`, error)
         return { success: false }
@@ -508,62 +552,83 @@ export function setupNpmManager(): void {
 }
 
 /**
- * 递归读取类型文件及其依赖
- * 将相对路径的 import/export 语句中引用的文件内联
+ * 递归读取类型文件及其依赖，将结果存入 files 对象
  */
-function readTypeFileWithDeps(
+function collectTypeFiles(
   baseDir: string,
   relPath: string,
+  files: Record<string, string>,
   visited: Set<string>
-): string {
+): void {
   // 规范化路径
-  const normalizedPath = relPath.replace(/^\.\//, '')
+  const normalizedPath = relPath.replace(/^\.\//, '').replace(/\\/g, '/')
+  // 已经是绝对路径的不要再 join (但在类型文件中引用的通常是相对的)
   const fullPath = path.join(baseDir, normalizedPath)
 
   // 防止循环引用
   if (visited.has(fullPath)) {
-    return ''
+    return
   }
   visited.add(fullPath)
 
-  // 尝试添加 .d.ts 扩展名
+  // 尝试定位文件
   let actualPath = fullPath
-  if (!fs.existsSync(actualPath) && !actualPath.endsWith('.d.ts')) {
+  let finalRelPath = normalizedPath
+
+  if (!fs.existsSync(actualPath)) {
     if (fs.existsSync(actualPath + '.d.ts')) {
       actualPath = actualPath + '.d.ts'
+      finalRelPath = finalRelPath + '.d.ts'
     } else if (fs.existsSync(path.join(actualPath, 'index.d.ts'))) {
       actualPath = path.join(actualPath, 'index.d.ts')
+      finalRelPath = path.join(finalRelPath, 'index.d.ts').replace(/\\/g, '/')
+    } else {
+      // 找不到文件
+      return
+    }
+  } else {
+    if (fs.statSync(actualPath).isDirectory()) {
+      if (fs.existsSync(path.join(actualPath, 'index.d.ts'))) {
+        actualPath = path.join(actualPath, 'index.d.ts')
+        finalRelPath = path.join(finalRelPath, 'index.d.ts').replace(/\\/g, '/')
+      } else {
+        return
+      }
     }
   }
 
   if (!fs.existsSync(actualPath)) {
-    return ''
+    return
   }
 
-  let content = fs.readFileSync(actualPath, 'utf-8')
+  const content = fs.readFileSync(actualPath, 'utf-8')
+  // 存储文件内容，使用相对路径作为键
+  files[finalRelPath] = content
 
   // 查找相对路径的 import/export 语句
   // 匹配: import ... from './xxx' 或 export ... from './xxx'
+  // 同时也支持 /// <reference path="..." />
   const importExportRegex = /(?:import|export)\s+.*?\s+from\s+['"](\.[^'"]+)['"]/g
+  const referenceRegex = /\/\/\/\s*<reference\s+path=["']([^"']+)["']\s*\/>/g
+
   const deps: string[] = []
   let match
 
   while ((match = importExportRegex.exec(content)) !== null) {
-    const depPath = match[1]
-    deps.push(depPath)
+    deps.push(match[1])
+  }
+
+  while ((match = referenceRegex.exec(content)) !== null) {
+    deps.push(match[1])
   }
 
   // 递归读取依赖文件
   const currentDir = path.dirname(actualPath)
   for (const dep of deps) {
+    // 计算依赖文件的绝对路径
     const depFullPath = path.resolve(currentDir, dep)
+    // 计算相对于 baseDir 的路径，以便递归调用
     const depRelPath = path.relative(baseDir, depFullPath)
-    const depContent = readTypeFileWithDeps(baseDir, depRelPath, visited)
-    if (depContent) {
-      // 将依赖内容添加到开头
-      content = depContent + '\n' + content
-    }
+    collectTypeFiles(baseDir, depRelPath, files, visited)
   }
-
-  return content
 }
