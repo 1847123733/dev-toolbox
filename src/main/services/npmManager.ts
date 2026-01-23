@@ -431,7 +431,7 @@ export function setupNpmManager(): void {
     async (
       _,
       packageName: string
-    ): Promise<{ success: boolean; content?: string; version?: string }> => {
+    ): Promise<{ success: boolean; content?: string; version?: string; files?: Record<string, string>; entry?: string }> => {
       const npmDir = getNpmDir()
       const nodeModulesDir = path.join(npmDir, 'node_modules')
       const packageDir = path.join(nodeModulesDir, packageName)
