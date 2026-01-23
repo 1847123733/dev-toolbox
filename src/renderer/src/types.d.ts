@@ -41,7 +41,7 @@ interface NpmAPI {
   getDir: () => Promise<string>
   setDir: () => Promise<{ success: boolean; path?: string }>
   resetDir: () => Promise<{ success: boolean; path: string }>
-  getTypes: (packageName: string) => Promise<{ success: boolean; content?: string; version?: string }>
+  getTypes: (packageName: string) => Promise<{ success: boolean; content?: string; version?: string; files?: Record<string, string>; entry?: string }>
   clearTypeCache: (packageName: string) => Promise<void>
 }
 
