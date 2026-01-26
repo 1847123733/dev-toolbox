@@ -84,7 +84,11 @@ const handleVersionClick = () => {
     window.api.app.openFile(downloadedFilePath.value)
   } else if (hasUpdate.value) {
     // 有更新，开始下载
-    downloadUpdate()
+    if (downloadUrl.value) {
+      downloadUpdate()
+    } else if (releaseUrl.value) {
+      window.open(releaseUrl.value, '_blank')
+    }
   } else {
     // 检查更新
     checkUpdate()

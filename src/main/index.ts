@@ -6,6 +6,7 @@ import { setupCodeRunner } from './services/codeRunner'
 import { setupNpmManager } from './services/npmManager'
 import { setupDomainLookup } from './services/domainLookup'
 import { setupDockService, closeDockWindow } from './services/dockService'
+import { notify } from './services/notification'
 
 // 配置 autoUpdater
 autoUpdater.autoDownload = false
@@ -15,6 +16,11 @@ autoUpdater.autoInstallOnAppQuit = true
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('disable-gpu-compositing')
 }
+
+// TODO: 如果是私有仓库，请在此处填入 GitHub Personal Access Token
+// 注意：客户端硬编码 Token 有安全风险，仅建议个人或内部使用
+const GITHUB_TOKEN =
+  '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'
 
 function createWindow(): void {
   // 创建浏览器窗口
@@ -71,8 +77,11 @@ function createWindow(): void {
       return new Promise((resolve) => {
         const options = {
           hostname: 'api.github.com',
-          path: '/repos/1847123733/dev-toolbox/releases/latest',
-          headers: { 'User-Agent': 'dev-toolbox' }
+          path: '/repos/1847123733/dev-toolbox/releases?per_page=1',
+          headers: {
+            'User-Agent': 'dev-toolbox',
+            ...(GITHUB_TOKEN ? { Authorization: `token ${GITHUB_TOKEN}` } : {})
+          }
         }
         https
           .get(options, (res) => {
@@ -80,20 +89,25 @@ function createWindow(): void {
             res.on('data', (chunk) => (data += chunk))
             res.on('end', () => {
               try {
-                const release = JSON.parse(data)
-                const latestVersion = release.tag_name?.replace('v', '') || ''
+                const response = JSON.parse(data)
+                const release = Array.isArray(response) ? response[0] : response
+                const latestVersion = release?.tag_name?.replace('v', '') || ''
                 const currentVersion = app.getVersion()
                 const hasUpdate = latestVersion && latestVersion !== currentVersion
                 // 找到 exe 文件
-                const exeAsset = release.assets?.find((a: any) => a.name?.endsWith('.exe'))
+                const exeAsset = release?.assets?.find((a: any) => a.name?.endsWith('.exe'))
+
+                // 私有仓库需要使用 API URL 下载 (url 字段)，公开仓库使用 browser_download_url
+                const downloadUrl = GITHUB_TOKEN ? exeAsset?.url : exeAsset?.browser_download_url
+
                 resolve({
                   success: true,
                   currentVersion,
                   latestVersion,
                   hasUpdate,
                   releaseUrl:
-                    release.html_url || 'https://github.com/1847123733/dev-toolbox/releases',
-                  downloadUrl: exeAsset?.browser_download_url || ''
+                    release?.html_url || 'https://github.com/1847123733/dev-toolbox/releases',
+                  downloadUrl: downloadUrl || ''
                 })
               } catch {
                 resolve({ success: false, error: '解析失败' })
@@ -109,6 +123,7 @@ function createWindow(): void {
 
   // 下载更新
   ipcMain.handle('app:downloadUpdate', async (_, downloadUrl: string) => {
+    notify.info('正在开始下载新版本...')
     try {
       const https = await import('https')
       const fs = await import('fs')
@@ -124,7 +139,11 @@ function createWindow(): void {
           .get(
             downloadUrl,
             {
-              headers: { 'User-Agent': 'dev-toolbox' }
+              headers: {
+                'User-Agent': 'dev-toolbox',
+                Accept: 'application/octet-stream', // 下载二进制文件必须
+                ...(GITHUB_TOKEN ? { Authorization: `token ${GITHUB_TOKEN}` } : {})
+              }
             },
             (response) => {
               // 处理重定向
@@ -147,10 +166,12 @@ function createWindow(): void {
                       redirectRes.pipe(file)
                       file.on('finish', () => {
                         file.close()
+                        notify.success('下载完成，准备安装')
                         resolve({ success: true, filePath })
                       })
                     })
                     .on('error', () => {
+                      notify.error('下载失败')
                       resolve({ success: false, error: '下载失败' })
                     })
                 }
@@ -169,6 +190,7 @@ function createWindow(): void {
                 response.pipe(file)
                 file.on('finish', () => {
                   file.close()
+                  notify.success('下载完成，准备安装')
                   resolve({ success: true, filePath })
                 })
               }
@@ -176,11 +198,13 @@ function createWindow(): void {
           )
           .on('error', () => {
             // 如果下载失败，在浏览器中打开
+            notify.error('下载出错，已跳转浏览器')
             shell.openExternal(downloadUrl)
             resolve({ success: false, error: '已在浏览器中打开下载' })
           })
       })
     } catch {
+      notify.error('下载异常，已跳转浏览器')
       shell.openExternal(downloadUrl)
       return { success: false, error: '已在浏览器中打开下载' }
     }
