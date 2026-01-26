@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
+// 通知类型
+type NotificationType = 'info' | 'success' | 'warning' | 'error'
+
+// 通知回调
+type NotificationCallback = (message: string, type: NotificationType) => void
+
 // 自定义 API 暴露给渲染进程
 const api = {
   // 窗口控制
@@ -13,6 +19,19 @@ const api = {
       ipcRenderer.on('window:maximized-change', (_, isMaximized) => callback(isMaximized))
     }
   },
+
+  // 全局通知
+  notification: {
+    onNotify: (callback: NotificationCallback) => {
+      ipcRenderer.on('app:notify', (_, message: string, type: NotificationType) => {
+        callback(message, type)
+      })
+    },
+    removeListener: () => {
+      ipcRenderer.removeAllListeners('app:notify')
+    }
+  },
+
   // 代码运行
   codeRunner: {
     run: (code: string, language: 'javascript' | 'typescript') =>
@@ -21,6 +40,7 @@ const api = {
     clean: () => ipcRenderer.invoke('code:clean'),
     killPort: (port: number) => ipcRenderer.invoke('code:killPort', port)
   },
+
   // NPM 管理
   npm: {
     search: (query: string) => ipcRenderer.invoke('npm:search', query),
@@ -33,9 +53,14 @@ const api = {
     getDir: () => ipcRenderer.invoke('npm:getDir'),
     setDir: () => ipcRenderer.invoke('npm:setDir'),
     resetDir: () => ipcRenderer.invoke('npm:resetDir'),
-    // 类型定义相关
     getTypes: (packageName: string) => ipcRenderer.invoke('npm:getTypes', packageName),
     clearTypeCache: (packageName: string) => ipcRenderer.invoke('npm:clearTypeCache', packageName)
+  },
+
+  // 域名查询
+  domainLookup: {
+    lookup: (input: string) => ipcRenderer.invoke('domain:lookup', input),
+    scanPorts: (ip: string) => ipcRenderer.invoke('domain:scanPorts', ip)
   }
 }
 

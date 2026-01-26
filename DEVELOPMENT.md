@@ -13,7 +13,8 @@ unitMap/
 │   │   ├── index.ts                   # 主进程入口，窗口创建、IPC 通信
 │   │   └── services/                  # 主进程服务
 │   │       ├── codeRunner.ts          # 代码运行服务（JS/TS 执行）
-│   │       └── npmManager.ts          # NPM 包管理服务
+│   │       ├── npmManager.ts          # NPM 包管理服务
+│   │       └── domainLookup.ts        # 域名查询服务
 │   │
 │   ├── preload/                       # 预加载脚本
 │   │   ├── index.ts                   # 暴露安全 API 给渲染进程
@@ -30,13 +31,15 @@ unitMap/
 │           │   ├── TitleBar.vue       # 自定义标题栏
 │           │   └── Sidebar.vue        # 左侧工具栏
 │           └── views/
-│               └── runjs/             # RunJS 模块
-│                   ├── RunJS.vue      # RunJS 主视图
-│                   └── components/
-│                       ├── CodeEditor.vue   # Monaco Editor 封装
-│                       ├── NpmPanel.vue     # NPM 包管理面板
-│                       ├── FilePanel.vue    # 文件管理面板
-│                       └── OutputPanel.vue  # 代码输出面板
+│               ├── runjs/             # RunJS 模块
+│               │   ├── RunJS.vue      # RunJS 主视图
+│               │   └── components/
+│               │       ├── CodeEditor.vue   # Monaco Editor 封装
+│               │       ├── NpmPanel.vue     # NPM 包管理面板
+│               │       ├── FilePanel.vue    # 文件管理面板
+│               │       └── OutputPanel.vue  # 代码输出面板
+│               └── domainlookup/      # 域名查询模块
+│                   └── DomainLookup.vue # 域名查询主视图
 │
 ├── resources/                         # 应用资源（图标等）
 ├── electron.vite.config.ts            # electron-vite 配置
@@ -107,6 +110,22 @@ unitMap/
   - [x] 自动持久化保存（LocalStorage）
   - [x] 真实文件列表
   - [x] 新建/关闭/切换文件
+
+### 3. 域名查询模块
+
+- [x] **DNS 解析**
+  - 获取域名的 IPv4/IPv6 地址
+  - 支持复制 IP 地址
+
+- [x] **IP 地理位置**
+  - 查询国家、城市、运营商信息
+  - 使用 ip-api.com 免费服务
+
+- [x] **技术栈识别**
+  - 分析 HTTP 响应头
+  - 识别服务器软件（nginx, Apache）
+  - 识别后端框架（Express, PHP, ASP.NET）
+  - 识别 CDN（Cloudflare, Vercel, 阿里云, 腾讯云）
 
 ---
 
@@ -195,6 +214,7 @@ const icons: Record<string, string> = {
 | `npm:list` | invoke | 获取已安装包列表 |
 | `npm:versions` | invoke | 获取包的所有版本 |
 | `npm:changeVersion` | invoke | 切换包版本 |
+| `domain:lookup` | invoke | 查询域名信息（IP、位置、技术栈） |
 | `code:log` | on | (主->渲) 实时日志流 |
 
 ---
@@ -285,6 +305,14 @@ npm run build:linux
 ---
 
 ## 🔄 版本历史
+
+### v1.7.0 (2026-01-23)
+
+- **新增域名查询工具**
+  - DNS 解析：获取 IPv4/IPv6 地址
+  - IP 地理位置：查询国家、城市、运营商
+  - 技术栈识别：服务器、框架、CDN
+  - 美观的卡片式 UI 设计
 
 ### v1.6.0 (2026-01-15)
 

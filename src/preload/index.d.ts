@@ -1,11 +1,20 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 
+// 通知类型
+type NotificationType = 'info' | 'success' | 'warning' | 'error'
+
 interface WindowAPI {
   minimize: () => void
   maximize: () => void
   close: () => void
   isMaximized: () => Promise<boolean>
   onMaximizedChange: (callback: (isMaximized: boolean) => void) => void
+}
+
+// 全局通知 API
+interface NotificationAPI {
+  onNotify: (callback: (message: string, type: NotificationType) => void) => void
+  removeListener: () => void
 }
 
 interface CodeRunnerAPI {
@@ -28,7 +37,6 @@ interface NpmAPI {
   getDir: () => Promise<string>
   setDir: () => Promise<{ success: boolean; path?: string }>
   resetDir: () => Promise<{ success: boolean; path: string }>
-  // 类型定义相关
   getTypes: (
     packageName: string
   ) => Promise<{
@@ -41,10 +49,91 @@ interface NpmAPI {
   clearTypeCache: (packageName: string) => Promise<void>
 }
 
+// ============ 域名查询相关类型 ============
+
+interface BasicInfo {
+  ip: string
+  ipVersion: 'IPv4' | 'IPv6'
+  addressType: string
+  isGlobal: boolean
+  networkClass: string
+  subnet: string
+}
+
+interface LocationInfo {
+  country: string
+  countryCode: string
+  region: string
+  city: string
+  zip: string
+  timezone: string
+  lat: number
+  lon: number
+}
+
+interface IspInfo {
+  isp: string
+  org: string
+  as: string
+  asname: string
+}
+
+interface ConnectionInfo {
+  connectionType: string
+  mobile: boolean
+  proxy: boolean
+  hosting: boolean
+}
+
+interface DomainDetails {
+  domain: string
+  reverseDns: string
+}
+
+interface PortInfo {
+  port: number
+  state: 'open' | 'closed' | 'filtered'
+  service: string
+  version?: string
+}
+
+interface TechInfo {
+  server?: string
+  framework?: string
+  cdn?: string
+  headers: Record<string, string>
+  ports: PortInfo[]
+}
+
+interface DomainInfo {
+  input: string
+  ips: { address: string; type: 'IPv4' | 'IPv6' }[]
+  basic?: BasicInfo
+  location?: LocationInfo
+  isp?: IspInfo
+  connection?: ConnectionInfo
+  domainDetails?: DomainDetails
+  tech?: TechInfo
+  error?: string
+}
+
+interface PortScanResult {
+  success: boolean
+  ports: PortInfo[]
+  useNmap: boolean
+}
+
+interface DomainLookupAPI {
+  lookup: (input: string) => Promise<DomainInfo>
+  scanPorts: (ip: string) => Promise<PortScanResult>
+}
+
 interface API {
   window: WindowAPI
+  notification: NotificationAPI
   codeRunner: CodeRunnerAPI
   npm: NpmAPI
+  domainLookup: DomainLookupAPI
 }
 
 interface CodeRunResult {

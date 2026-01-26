@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupCodeRunner } from './services/codeRunner'
 import { setupNpmManager } from './services/npmManager'
+import { setupDomainLookup } from './services/domainLookup'
 
 function createWindow(): void {
   // 创建浏览器窗口
@@ -86,6 +87,7 @@ if (!gotTheLock) {
     // 设置 IPC 服务
     setupCodeRunner()
     setupNpmManager()
+    setupDomainLookup()
 
     createWindow()
 
