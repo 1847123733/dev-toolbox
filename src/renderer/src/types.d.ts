@@ -106,6 +106,7 @@ interface AppAPI {
     error?: string
   }>
   openFile: (filePath: string) => Promise<{ success: boolean }>
+  setProxy: (proxyUrl: string) => Promise<{ success: boolean; error?: string }>
   onDownloadProgress: (callback: (progress: number) => void) => void
 }
 

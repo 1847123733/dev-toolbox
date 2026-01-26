@@ -19,7 +19,8 @@ const tools = [
 const toolComponents: Record<string, Component> = {
   runjs: defineAsyncComponent(() => import('./views/runjs/RunJS.vue')),
   domain: defineAsyncComponent(() => import('./views/domainlookup/DomainLookup.vue')),
-  dock: defineAsyncComponent(() => import('./views/dock/DockSettings.vue'))
+  dock: defineAsyncComponent(() => import('./views/dock/DockSettings.vue')),
+  settings: defineAsyncComponent(() => import('./views/settings/Settings.vue'))
   // 添加新工具：json: defineAsyncComponent(() => import('./views/json/JsonTool.vue'))
 }
 

@@ -151,7 +151,13 @@ const getIcon = (iconName: string) => {
     <!-- 底部设置按钮 -->
     <div class="mt-auto px-2 w-full">
       <button
-        class="w-full aspect-square rounded-xl flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-lighter)] transition-all"
+        @click="emit('select', 'settings')"
+        class="w-full aspect-square rounded-xl flex items-center justify-center transition-all"
+        :class="[
+          activeTool === 'settings'
+            ? 'bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/50 text-indigo-400'
+            : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-lighter)]'
+        ]"
         title="设置"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

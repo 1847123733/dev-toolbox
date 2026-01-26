@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, net } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -73,52 +73,56 @@ function createWindow(): void {
   // 检查最新版本
   ipcMain.handle('app:checkUpdate', async () => {
     try {
-      const https = await import('https')
       return new Promise((resolve) => {
         notify.info('检查中')
-        const options = {
+        const request = net.request({
+          method: 'GET',
+          protocol: 'https:',
           hostname: 'api.github.com',
-          path: '/repos/1847123733/dev-toolbox/releases?per_page=1',
-          headers: {
-            'User-Agent': 'dev-toolbox',
-            ...(GITHUB_TOKEN ? { Authorization: `token ${GITHUB_TOKEN}` } : {})
-          }
+          path: '/repos/1847123733/dev-toolbox/releases?per_page=1'
+        })
+
+        request.setHeader('User-Agent', 'dev-toolbox')
+        if (GITHUB_TOKEN) {
+          request.setHeader('Authorization', `token ${GITHUB_TOKEN}`)
         }
-        https
-          .get(options, (res) => {
-            let data = ''
-            res.on('data', (chunk) => (data += chunk))
-            res.on('end', () => {
-              try {
-                const response = JSON.parse(data)
-                const release = Array.isArray(response) ? response[0] : response
-                const latestVersion = release?.tag_name?.replace('v', '') || ''
-                const currentVersion = app.getVersion()
-                const hasUpdate = latestVersion && latestVersion !== currentVersion
-                // 找到 exe 文件
-                const exeAsset = release?.assets?.find((a: any) => a.name?.endsWith('.exe'))
 
-                // 私有仓库需要使用 API URL 下载 (url 字段)，公开仓库使用 browser_download_url
-                const downloadUrl = GITHUB_TOKEN ? exeAsset?.url : exeAsset?.browser_download_url
+        request.on('response', (response) => {
+          let data = ''
+          response.on('data', (chunk) => (data += chunk))
+          response.on('end', () => {
+            try {
+              const resData = JSON.parse(data)
+              const release = Array.isArray(resData) ? resData[0] : resData
+              const latestVersion = release?.tag_name?.replace('v', '') || ''
+              const currentVersion = app.getVersion()
+              const hasUpdate = latestVersion && latestVersion !== currentVersion
 
-                resolve({
-                  success: true,
-                  currentVersion,
-                  latestVersion,
-                  hasUpdate,
-                  releaseUrl:
-                    release?.html_url || 'https://github.com/1847123733/dev-toolbox/releases',
-                  downloadUrl: downloadUrl || ''
-                })
-              } catch {
-                resolve({ success: false, error: '解析失败' })
-              }
-            })
+              const exeAsset = release?.assets?.find((a: any) => a.name?.endsWith('.exe'))
+              // 私有仓库需要使用 API URL 下载 (url 字段)，公开仓库使用 browser_download_url
+              const downloadUrl = GITHUB_TOKEN ? exeAsset?.url : exeAsset?.browser_download_url
+
+              resolve({
+                success: true,
+                currentVersion,
+                latestVersion,
+                hasUpdate,
+                releaseUrl:
+                  release?.html_url || 'https://github.com/1847123733/dev-toolbox/releases',
+                downloadUrl: downloadUrl || ''
+              })
+            } catch {
+              resolve({ success: false, error: '解析失败' })
+            }
           })
-          .on('error', () => {
-            notify.error('网络错误')
-            resolve({ success: false, error: '网络错误' })
-          })
+        })
+
+        request.on('error', () => {
+          notify.error('网络错误')
+          resolve({ success: false, error: '网络错误' })
+        })
+
+        request.end()
       })
     } catch {
       notify.error('检查失败')
@@ -130,7 +134,6 @@ function createWindow(): void {
   ipcMain.handle('app:downloadUpdate', async (_, downloadUrl: string) => {
     notify.info('正在开始下载新版本...')
     try {
-      const https = await import('https')
       const fs = await import('fs')
       const path = await import('path')
 
@@ -140,73 +143,54 @@ function createWindow(): void {
       return new Promise((resolve) => {
         const file = fs.createWriteStream(filePath)
 
-        https
-          .get(
-            downloadUrl,
-            {
-              headers: {
-                'User-Agent': 'dev-toolbox',
-                Accept: 'application/octet-stream', // 下载二进制文件必须
-                ...(GITHUB_TOKEN ? { Authorization: `token ${GITHUB_TOKEN}` } : {})
-              }
-            },
-            (response) => {
-              // 处理重定向
-              if (response.statusCode === 302 || response.statusCode === 301) {
-                const redirectUrl = response.headers.location
-                if (redirectUrl) {
-                  https
-                    .get(redirectUrl, (redirectRes) => {
-                      const totalSize = parseInt(redirectRes.headers['content-length'] || '0', 10)
-                      let downloadedSize = 0
+        const request = net.request(downloadUrl)
+        request.setHeader('User-Agent', 'dev-toolbox')
+        request.setHeader('Accept', 'application/octet-stream')
+        if (GITHUB_TOKEN) {
+          request.setHeader('Authorization', `token ${GITHUB_TOKEN}`)
+        }
 
-                      redirectRes.on('data', (chunk) => {
-                        downloadedSize += chunk.length
-                        if (totalSize > 0) {
-                          const progress = Math.round((downloadedSize / totalSize) * 100)
-                          mainWindow.webContents.send('app:downloadProgress', progress)
-                        }
-                      })
+        request.on('response', (response) => {
+          // net 模块会自动处理重定向，这里无需手动处理 301/302
+          if (response.statusCode >= 400) {
+            notify.error('下载失败: ' + response.statusCode)
+            resolve({ success: false, error: '下载失败' })
+            return
+          }
 
-                      redirectRes.pipe(file)
-                      file.on('finish', () => {
-                        file.close()
-                        notify.success('下载完成，准备安装')
-                        resolve({ success: true, filePath })
-                      })
-                    })
-                    .on('error', () => {
-                      notify.error('下载失败')
-                      resolve({ success: false, error: '下载失败' })
-                    })
-                }
-              } else {
-                const totalSize = parseInt(response.headers['content-length'] || '0', 10)
-                let downloadedSize = 0
+          const totalSize = parseInt((response.headers['content-length'] as string) || '0', 10)
+          let downloadedSize = 0
 
-                response.on('data', (chunk) => {
-                  downloadedSize += chunk.length
-                  if (totalSize > 0) {
-                    const progress = Math.round((downloadedSize / totalSize) * 100)
-                    mainWindow.webContents.send('app:downloadProgress', progress)
-                  }
-                })
-
-                response.pipe(file)
-                file.on('finish', () => {
-                  file.close()
-                  notify.success('下载完成，准备安装')
-                  resolve({ success: true, filePath })
-                })
-              }
+          response.on('data', (chunk) => {
+            downloadedSize += chunk.length
+            if (totalSize > 0) {
+              const progress = Math.round((downloadedSize / totalSize) * 100)
+              mainWindow.webContents.send('app:downloadProgress', progress)
             }
-          )
-          .on('error', () => {
-            // 如果下载失败，在浏览器中打开
-            notify.error('下载出错，已跳转浏览器')
-            shell.openExternal(downloadUrl)
-            resolve({ success: false, error: '已在浏览器中打开下载' })
           })
+
+          response.pipe(file)
+
+          file.on('finish', () => {
+            file.close()
+            notify.success('下载完成，准备安装')
+            resolve({ success: true, filePath })
+          })
+
+          file.on('error', () => {
+            // 文件写入错误
+            notify.error('文件写入失败')
+            resolve({ success: false, error: '文件写入失败' })
+          })
+        })
+
+        request.on('error', () => {
+          notify.error('下载出错，已跳转浏览器')
+          shell.openExternal(downloadUrl)
+          resolve({ success: false, error: '已在浏览器中打开下载' })
+        })
+
+        request.end()
       })
     } catch {
       notify.error('下载异常，已跳转浏览器')
@@ -219,6 +203,21 @@ function createWindow(): void {
   ipcMain.handle('app:openFile', async (_, filePath: string) => {
     shell.openPath(filePath)
     return { success: true }
+  })
+
+  // 设置代理
+  ipcMain.handle('app:setProxy', async (_, proxyUrl: string) => {
+    try {
+      // 设置代理
+      const config = proxyUrl ? { proxyRules: proxyUrl } : { mode: 'direct' }
+      await mainWindow.webContents.session.setProxy(config)
+      notify.success(proxyUrl ? '代理已设置' : '代理已清除')
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to set proxy:', error)
+      notify.error('设置代理失败')
+      return { success: false, error: 'Set proxy failed' }
+    }
   })
 
   mainWindow.on('maximize', () => {

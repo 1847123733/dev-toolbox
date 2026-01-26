@@ -26,6 +26,7 @@ const api = {
     checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
     downloadUpdate: (url: string) => ipcRenderer.invoke('app:downloadUpdate', url),
     openFile: (filePath: string) => ipcRenderer.invoke('app:openFile', filePath),
+    setProxy: (proxyUrl: string) => ipcRenderer.invoke('app:setProxy', proxyUrl),
     onDownloadProgress: (callback: (progress: number) => void) => {
       ipcRenderer.on('app:downloadProgress', (_, progress) => callback(progress))
     }
