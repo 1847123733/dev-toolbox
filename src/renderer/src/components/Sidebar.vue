@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
+
 interface Tool {
   id: string
   name: string
@@ -13,6 +15,81 @@ defineProps<{
 const emit = defineEmits<{
   select: [toolId: string]
 }>()
+
+// 版本号
+const version = ref('')
+const hasUpdate = ref(false)
+const latestVersion = ref('')
+const releaseUrl = ref('')
+const downloadUrl = ref('')
+const checking = ref(false)
+const downloading = ref(false)
+const downloadProgress = ref(0)
+const downloadedFilePath = ref('')
+
+onMounted(async () => {
+  version.value = await window.api.app.getVersion()
+  // 监听下载进度
+  window.api.app.onDownloadProgress((progress) => {
+    downloadProgress.value = progress
+  })
+  // 自动检查更新
+  checkUpdate()
+})
+
+// 检查更新
+const checkUpdate = async () => {
+  if (checking.value) return
+  checking.value = true
+  try {
+    const result = await window.api.app.checkUpdate()
+    if (result.success) {
+      hasUpdate.value = result.hasUpdate || false
+      latestVersion.value = result.latestVersion || ''
+      releaseUrl.value = result.releaseUrl || ''
+      downloadUrl.value = result.downloadUrl || ''
+    }
+  } catch (e) {
+    console.error('检查更新失败', e)
+  } finally {
+    checking.value = false
+  }
+}
+
+// 下载更新
+const downloadUpdate = async () => {
+  if (downloading.value || !downloadUrl.value) return
+  downloading.value = true
+  downloadProgress.value = 0
+
+  try {
+    const result = await window.api.app.downloadUpdate(downloadUrl.value)
+    if (result.success && result.filePath) {
+      downloadedFilePath.value = result.filePath
+      // 下载完成后自动打开安装程序
+      await window.api.app.openFile(result.filePath)
+    }
+  } catch (e) {
+    console.error('下载失败', e)
+  } finally {
+    downloading.value = false
+  }
+}
+
+// 点击版本号
+const handleVersionClick = () => {
+  if (downloading.value) return
+  if (downloadedFilePath.value) {
+    // 已下载，再次打开安装程序
+    window.api.app.openFile(downloadedFilePath.value)
+  } else if (hasUpdate.value) {
+    // 有更新，开始下载
+    downloadUpdate()
+  } else {
+    // 检查更新
+    checkUpdate()
+  }
+}
 
 // 图标映射
 const getIcon = (iconName: string) => {
@@ -88,6 +165,65 @@ const getIcon = (iconName: string) => {
           />
         </svg>
       </button>
+      <!-- 版本号 -->
+      <div
+        class="text-[9px] mt-2 text-center cursor-pointer group"
+        :class="[
+          downloading
+            ? 'text-blue-400'
+            : downloadedFilePath
+              ? 'text-green-400'
+              : hasUpdate
+                ? 'text-yellow-400'
+                : 'text-[var(--color-text-muted)] opacity-60'
+        ]"
+        :title="
+          downloading
+            ? `下载中 ${downloadProgress}%`
+            : downloadedFilePath
+              ? '点击运行安装程序'
+              : hasUpdate
+                ? `有新版本 v${latestVersion}，点击下载`
+                : '点击检查更新'
+        "
+        @click="handleVersionClick"
+      >
+        <span v-if="checking" class="animate-pulse">检查中...</span>
+        <span v-else-if="downloading" class="flex items-center justify-center gap-1">
+          <svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          {{ downloadProgress }}%
+        </span>
+        <span v-else-if="downloadedFilePath" class="flex items-center justify-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          安装
+        </span>
+        <span v-else-if="hasUpdate" class="flex items-center justify-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+            />
+          </svg>
+          v{{ latestVersion }}
+        </span>
+        <span v-else class="group-hover:opacity-100 opacity-60">v{{ version }}</span>
+      </div>
     </div>
   </aside>
 </template>

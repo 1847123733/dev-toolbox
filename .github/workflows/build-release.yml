@@ -11,14 +11,10 @@ permissions:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Build on Windows
+    runs-on: windows-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
 
     steps:
       - name: Checkout code
@@ -47,16 +43,7 @@ jobs:
         run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Build for Windows
-        if: matrix.os == 'windows-latest'
         run: npm run build:win
-
-      - name: Build for macOS
-        if: matrix.os == 'macos-latest'
-        run: npm run build:mac
-
-      - name: Build for Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: npm run build:linux
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
@@ -67,7 +54,4 @@ jobs:
           prerelease: true
           files: |
             dist/*.exe
-            dist/*.dmg
-            dist/*.AppImage
-            dist/*.deb
             dist/*.zip

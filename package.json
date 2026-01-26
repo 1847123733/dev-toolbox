@@ -73,7 +73,9 @@
       {
         "from": "./resources",
         "to": "resources",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
@@ -81,19 +83,11 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
-    },
-    "mac": {
-      "icon": "./resources/icon.ico",
-      "target": ["dmg"],
-      "category": "public.app-category.developer-tools"
-    },
-    "linux": {
-      "icon": "./resources/icon.ico",
-      "target": ["AppImage", "deb"],
-      "category": "Development"
     },
     "nsis": {
       "oneClick": false,

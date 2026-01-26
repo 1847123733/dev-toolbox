@@ -20,6 +20,17 @@ const api = {
     }
   },
 
+  // 应用信息
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
+    downloadUpdate: (url: string) => ipcRenderer.invoke('app:downloadUpdate', url),
+    openFile: (filePath: string) => ipcRenderer.invoke('app:openFile', filePath),
+    onDownloadProgress: (callback: (progress: number) => void) => {
+      ipcRenderer.on('app:downloadProgress', (_, progress) => callback(progress))
+    }
+  },
+
   // 全局通知
   notification: {
     onNotify: (callback: NotificationCallback) => {

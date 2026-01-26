@@ -47,9 +47,7 @@ interface NpmAPI {
   getDir: () => Promise<string>
   setDir: () => Promise<{ success: boolean; path?: string }>
   resetDir: () => Promise<{ success: boolean; path: string }>
-  getTypes: (
-    packageName: string
-  ) => Promise<{
+  getTypes: (packageName: string) => Promise<{
     success: boolean
     content?: string
     version?: string
@@ -91,6 +89,26 @@ interface DomainLookupAPI {
   scanPorts: (ip: string) => Promise<any>
 }
 
+interface AppAPI {
+  getVersion: () => Promise<string>
+  checkUpdate: () => Promise<{
+    success: boolean
+    currentVersion?: string
+    latestVersion?: string
+    hasUpdate?: boolean
+    releaseUrl?: string
+    downloadUrl?: string
+    error?: string
+  }>
+  downloadUpdate: (url: string) => Promise<{
+    success: boolean
+    filePath?: string
+    error?: string
+  }>
+  openFile: (filePath: string) => Promise<{ success: boolean }>
+  onDownloadProgress: (callback: (progress: number) => void) => void
+}
+
 interface API {
   window: WindowAPI
   codeRunner: CodeRunnerAPI
@@ -98,6 +116,7 @@ interface API {
   dock: DockAPI
   notification: NotificationAPI
   domainLookup: DomainLookupAPI
+  app: AppAPI
 }
 
 declare global {
