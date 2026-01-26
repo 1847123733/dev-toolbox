@@ -75,6 +75,7 @@ function createWindow(): void {
     try {
       const https = await import('https')
       return new Promise((resolve) => {
+        notify.info('检查中')
         const options = {
           hostname: 'api.github.com',
           path: '/repos/1847123733/dev-toolbox/releases?per_page=1',
@@ -114,9 +115,13 @@ function createWindow(): void {
               }
             })
           })
-          .on('error', () => resolve({ success: false, error: '网络错误' }))
+          .on('error', () => {
+            notify.error('网络错误')
+            resolve({ success: false, error: '网络错误' })
+          })
       })
     } catch {
+      notify.error('检查失败')
       return { success: false, error: '检查失败' }
     }
   })
