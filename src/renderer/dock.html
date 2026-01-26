@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>macOS Dock</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+    }
+
+    .dock-container {
+      position: fixed;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 4px;
+    }
+
+    .dock-container.bottom {
+      bottom: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      flex-direction: row;
+    }
+
+    .dock-container.left {
+      left: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      flex-direction: column;
+    }
+
+    .dock-container.right {
+      right: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      flex-direction: column;
+    }
+
+    .dock {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 18px;
+      padding: 10px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 
+        0 0 0 1px rgba(0, 0, 0, 0.1),
+        0 10px 40px rgba(0, 0, 0, 0.3);
+      gap: 18px;
+    }
+
+    .dock-container.left .dock,
+    .dock-container.right .dock {
+      flex-direction: column;
+      padding: 12px 8px;
+    }
+
+    .dock-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      border-radius: 12px;
+    }
+
+    .dock-item:hover {
+      transform: translateY(-10px) scale(1.3);
+    }
+
+    .dock-container.left .dock-item:hover {
+      transform: translateX(10px) scale(1.3);
+    }
+
+    .dock-container.right .dock-item:hover {
+      transform: translateX(-10px) scale(1.3);
+    }
+
+    .dock-item .icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05));
+      box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .dock-item:hover .icon {
+      box-shadow: 
+        0 4px 16px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+
+    .dock-item svg {
+      transition: all 0.2s ease;
+    }
+
+    /* 不同应用的颜色 */
+    .dock-item.finder .icon { background: linear-gradient(135deg, #1E90FF, #4169E1); }
+    .dock-item.terminal .icon { background: linear-gradient(135deg, #2d2d2d, #1a1a1a); }
+    .dock-item.browser .icon { background: linear-gradient(135deg, #4285F4, #34A853, #FBBC05, #EA4335); }
+    .dock-item.settings .icon { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+    .dock-item.folder .icon { background: linear-gradient(135deg, #60A5FA, #3B82F6); }
+
+    /* 分隔线 */
+    .dock-separator {
+      width: 1px;
+      height: 40px;
+      background: rgba(255, 255, 255, 0.3);
+      margin: 0 8px;
+    }
+
+    .dock-container.left .dock-separator,
+    .dock-container.right .dock-separator {
+      width: 40px;
+      height: 1px;
+      margin: 8px 0;
+    }
+
+    /* 工具提示 */
+    .dock-item .tooltip {
+      position: absolute;
+      bottom: calc(100% + 12px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30, 30, 46, 0.95);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .dock-container.left .dock-item .tooltip {
+      bottom: auto;
+      left: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .dock-container.right .dock-item .tooltip {
+      bottom: auto;
+      left: auto;
+      right: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .dock-item:hover .tooltip {
+      opacity: 1;
+    }
+
+    /* 点击指示器 */
+    .dock-item .indicator {
+      position: absolute;
+      bottom: -6px;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.8);
+      opacity: 0;
+    }
+
+    .dock-item.active .indicator {
+      opacity: 1;
+    }
+
+    .dock-container.left .dock-item .indicator {
+      bottom: auto;
+      left: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .dock-container.right .dock-item .indicator {
+      bottom: auto;
+      right: -6px;
+      left: auto;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    /* 放大效果的邻居 */
+    .dock-item.neighbor {
+      transform: translateY(-5px) scale(1.15);
+    }
+
+    .dock-container.left .dock-item.neighbor {
+      transform: translateX(5px) scale(1.15);
+    }
+
+    .dock-container.right .dock-item.neighbor {
+      transform: translateX(-5px) scale(1.15);
+    }
+
+    /* 自动隐藏动画 */
+    .dock-container.auto-hide {
+      transition: transform 0.3s ease;
+    }
+
+    .dock-container.auto-hide.hidden.bottom {
+      transform: translateX(-50%) translateY(100%);
+    }
+
+    .dock-container.auto-hide.hidden.left {
+      transform: translateY(-50%) translateX(-100%);
+    }
+
+    .dock-container.auto-hide.hidden.right {
+      transform: translateY(-50%) translateX(100%);
+    }
+  </style>
+</head>
+<body>
+  <div id="dock-container" class="dock-container bottom">
+    <div class="dock" id="dock">
+      <!-- Dock items will be dynamically generated -->
+    </div>
+  </div>
+
+  <script>
+    // Dock 配置
+    let dockConfig = {
+      position: 'bottom',
+      iconSize: 48,
+      autoHide: false,
+      magnification: true
+    };
+
+    // Dock 应用列表
+    const dockApps = [
+      { id: 'finder', name: '访达', icon: 'finder', action: 'openFolder' },
+      { id: 'terminal', name: '终端', icon: 'terminal', action: 'openTerminal' },
+      { id: 'browser', name: '浏览器', icon: 'browser', action: 'openBrowser' },
+      { id: 'separator', type: 'separator' },
+      { id: 'settings', name: '设置', icon: 'settings', action: 'openSettings' }
+    ];
+
+    // 图标 SVG
+    const iconSvgs = {
+      finder: `<svg viewBox="0 0 24 24" fill="white" stroke="none">
+        <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v12h16V6H4zm2 2h3v2H6V8zm0 4h3v2H6v-2z"/>
+      </svg>`,
+      terminal: `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <path d="M4 17l6-5-6-5M12 19h8"/>
+      </svg>`,
+      browser: `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>`,
+      settings: `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+      </svg>`,
+      folder: `<svg viewBox="0 0 24 24" fill="white" stroke="none">
+        <path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z"/>
+      </svg>`
+    };
+
+    // 初始化 Dock
+    function initDock() {
+      const dock = document.getElementById('dock');
+      const container = document.getElementById('dock-container');
+      
+      // 设置位置
+      container.className = `dock-container ${dockConfig.position}`;
+      if (dockConfig.autoHide) {
+        container.classList.add('auto-hide', 'hidden');
+      }
+
+      // 清空并重建
+      dock.innerHTML = '';
+
+      dockApps.forEach((app, index) => {
+        if (app.type === 'separator') {
+          const separator = document.createElement('div');
+          separator.className = 'dock-separator';
+          dock.appendChild(separator);
+          return;
+        }
+
+        const item = document.createElement('div');
+        item.className = `dock-item ${app.id}`;
+        item.dataset.index = index;
+        item.dataset.action = app.action;
+
+        const icon = document.createElement('div');
+        icon.className = 'icon';
+        icon.style.width = `${dockConfig.iconSize}px`;
+        icon.style.height = `${dockConfig.iconSize}px`;
+        icon.innerHTML = iconSvgs[app.icon] || iconSvgs.folder;
+        icon.querySelector('svg').style.width = `${dockConfig.iconSize * 0.6}px`;
+        icon.querySelector('svg').style.height = `${dockConfig.iconSize * 0.6}px`;
+
+        const tooltip = document.createElement('div');
+        tooltip.className = 'tooltip';
+        tooltip.textContent = app.name;
+
+        const indicator = document.createElement('div');
+        indicator.className = 'indicator';
+
+        item.appendChild(icon);
+        item.appendChild(tooltip);
+        item.appendChild(indicator);
+        dock.appendChild(item);
+
+        // 点击事件
+        item.addEventListener('click', () => handleAction(app.action));
+
+        // 放大效果
+        if (dockConfig.magnification) {
+          item.addEventListener('mouseenter', () => handleMouseEnter(index));
+          item.addEventListener('mouseleave', handleMouseLeave);
+        }
+      });
+
+      // 自动隐藏逻辑
+      if (dockConfig.autoHide) {
+        setupAutoHide();
+      }
+    }
+
+    // 处理鼠标进入
+    function handleMouseEnter(index) {
+      const items = document.querySelectorAll('.dock-item');
+      items.forEach((item, i) => {
+        item.classList.remove('neighbor');
+        if (Math.abs(i - index) === 1) {
+          item.classList.add('neighbor');
+        }
+      });
+    }
+
+    // 处理鼠标离开
+    function handleMouseLeave() {
+      const items = document.querySelectorAll('.dock-item');
+      items.forEach(item => item.classList.remove('neighbor'));
+    }
+
+    // 处理动作
+    function handleAction(action) {
+      if (window.dockAPI) {
+        window.dockAPI.action(action);
+      }
+    }
+
+    // 设置自动隐藏
+    function setupAutoHide() {
+      const container = document.getElementById('dock-container');
+      const dock = document.getElementById('dock');
+      let hideTimeout = null;
+      let showTimeout = null;
+      let isHovering = false;
+
+      // 清除所有定时器
+      function clearAllTimeouts() {
+        if (hideTimeout) {
+          clearTimeout(hideTimeout);
+          hideTimeout = null;
+        }
+        if (showTimeout) {
+          clearTimeout(showTimeout);
+          showTimeout = null;
+        }
+      }
+
+      // 检查鼠标是否在边缘触发区域
+      function isInTriggerZone(e) {
+        const threshold = 3;
+        if (dockConfig.position === 'bottom') {
+          return e.clientY >= window.innerHeight - threshold;
+        } else if (dockConfig.position === 'left') {
+          return e.clientX <= threshold;
+        } else if (dockConfig.position === 'right') {
+          return e.clientX >= window.innerWidth - threshold;
+        }
+        return false;
+      }
+
+      document.addEventListener('mousemove', (e) => {
+        // 如果鼠标在 Dock 上，不做任何处理
+        if (isHovering) {
+          return;
+        }
+
+        const inTriggerZone = isInTriggerZone(e);
+
+        if (inTriggerZone) {
+          clearAllTimeouts();
+          // 延迟显示
+          showTimeout = setTimeout(() => {
+            container.classList.remove('hidden');
+          }, 300);
+        } else {
+          clearAllTimeouts();
+          // 延迟隐藏
+          hideTimeout = setTimeout(() => {
+            if (!isHovering) {
+              container.classList.add('hidden');
+            }
+          }, 1000);
+        }
+      });
+
+      // 鼠标进入 Dock 区域
+      container.addEventListener('mouseenter', () => {
+        isHovering = true;
+        clearAllTimeouts();
+        container.classList.remove('hidden');
+      });
+
+      // 鼠标离开 Dock 区域
+      container.addEventListener('mouseleave', () => {
+        isHovering = false;
+        clearAllTimeouts();
+        hideTimeout = setTimeout(() => {
+          container.classList.add('hidden');
+        }, 800);
+      });
+    }
+
+    // 更新配置
+    function updateConfig(config) {
+      dockConfig = { ...dockConfig, ...config };
+      initDock();
+    }
+
+    // 暴露给 preload
+    window.updateDockConfig = updateConfig;
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', initDock);
+  </script>
+</body>
+</html>

@@ -37,9 +37,7 @@ interface NpmAPI {
   getDir: () => Promise<string>
   setDir: () => Promise<{ success: boolean; path?: string }>
   resetDir: () => Promise<{ success: boolean; path: string }>
-  getTypes: (
-    packageName: string
-  ) => Promise<{
+  getTypes: (packageName: string) => Promise<{
     success: boolean
     content?: string
     files?: Record<string, string>
@@ -128,12 +126,34 @@ interface DomainLookupAPI {
   scanPorts: (ip: string) => Promise<PortScanResult>
 }
 
+// ============ Dock 相关类型 ============
+
+interface DockSettings {
+  position: 'bottom' | 'left' | 'right'
+  iconSize: number
+  autoHide: boolean
+  magnification: boolean
+}
+
+interface DockResult {
+  success: boolean
+  message?: string
+}
+
+interface DockAPI {
+  open: (settings: DockSettings) => Promise<DockResult>
+  close: () => Promise<DockResult>
+  isOpen: () => Promise<boolean>
+  action: (action: string) => Promise<{ success: boolean }>
+}
+
 interface API {
   window: WindowAPI
   notification: NotificationAPI
   codeRunner: CodeRunnerAPI
   npm: NpmAPI
   domainLookup: DomainLookupAPI
+  dock: DockAPI
 }
 
 interface CodeRunResult {

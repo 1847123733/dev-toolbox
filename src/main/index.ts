@@ -4,6 +4,12 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupCodeRunner } from './services/codeRunner'
 import { setupNpmManager } from './services/npmManager'
 import { setupDomainLookup } from './services/domainLookup'
+import { setupDockService, closeDockWindow } from './services/dockService'
+
+// Windows 上透明窗口需要禁用某些 GPU 功能以避免标题栏问题
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+}
 
 function createWindow(): void {
   // 创建浏览器窗口
@@ -58,6 +64,9 @@ function createWindow(): void {
   mainWindow.on('unmaximize', () => {
     mainWindow.webContents.send('window:maximized-change', false)
   })
+
+  // 设置 Dock 服务
+  setupDockService(mainWindow)
 }
 
 // 单实例锁
@@ -97,6 +106,8 @@ if (!gotTheLock) {
   })
 
   app.on('window-all-closed', () => {
+    // 关闭 Dock 窗口
+    closeDockWindow()
     if (process.platform !== 'darwin') {
       app.quit()
     }

@@ -10,14 +10,16 @@ const activeTool = ref('runjs')
 // 工具列表
 const tools = [
   { id: 'runjs', name: 'RunJS', icon: 'code' },
-  { id: 'domain', name: '域名查询', icon: 'globe' }
+  { id: 'domain', name: '域名查询', icon: 'globe' },
+  { id: 'dock', name: 'macOS Dock', icon: 'dock' }
   // 添加新工具：{ id: 'json', name: 'JSON工具', icon: 'json' }
 ]
 
 // 工具组件映射（懒加载）
 const toolComponents: Record<string, Component> = {
   runjs: defineAsyncComponent(() => import('./views/runjs/RunJS.vue')),
-  domain: defineAsyncComponent(() => import('./views/domainlookup/DomainLookup.vue'))
+  domain: defineAsyncComponent(() => import('./views/domainlookup/DomainLookup.vue')),
+  dock: defineAsyncComponent(() => import('./views/dock/DockSettings.vue'))
   // 添加新工具：json: defineAsyncComponent(() => import('./views/json/JsonTool.vue'))
 }
 
@@ -44,11 +46,7 @@ onMounted(() => {
     <!-- 主体内容 -->
     <div class="flex flex-1 overflow-hidden">
       <!-- 左侧工具栏 -->
-      <Sidebar
-        :tools="tools"
-        :active-tool="activeTool"
-        @select="handleToolSelect"
-      />
+      <Sidebar :tools="tools" :active-tool="activeTool" @select="handleToolSelect" />
 
       <!-- 主内容区 -->
       <main class="flex-1 overflow-hidden">
@@ -67,4 +65,3 @@ onMounted(() => {
   overflow: hidden;
 }
 </style>
-

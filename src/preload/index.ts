@@ -61,6 +61,19 @@ const api = {
   domainLookup: {
     lookup: (input: string) => ipcRenderer.invoke('domain:lookup', input),
     scanPorts: (ip: string) => ipcRenderer.invoke('domain:scanPorts', ip)
+  },
+
+  // macOS Dock
+  dock: {
+    open: (settings: {
+      position: 'bottom' | 'left' | 'right'
+      iconSize: number
+      autoHide: boolean
+      magnification: boolean
+    }) => ipcRenderer.invoke('dock:open', settings),
+    close: () => ipcRenderer.invoke('dock:close'),
+    isOpen: () => ipcRenderer.invoke('dock:isOpen'),
+    action: (action: string) => ipcRenderer.invoke('dock:action', action)
   }
 }
 
