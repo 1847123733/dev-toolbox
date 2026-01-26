@@ -16,17 +16,7 @@ export interface CodeFile {
 }
 
 // 默认代码
-const defaultCode = `// 引入 uuid 包
-const { v4: uuidv4 } = require('uuid');
-
-// 生成 UUID
-function generateUUID() {
-  return uuidv4();
-}
-
-// 测试代码
-console.log('生成的 UUID:', generateUUID());
-`
+const defaultCode = `console.log("hello world");`
 
 // 状态
 const files = ref<CodeFile[]>([])
@@ -75,21 +65,29 @@ initFiles()
 
 // 当前激活的文件
 const activeFile = computed(() => {
-  return files.value.find(f => f.id === activeFileId.value) || files.value[0]
+  return files.value.find((f) => f.id === activeFileId.value) || files.value[0]
 })
 
 // 确保 activeFileId 始终有效
-watch(activeFileId, (newId) => {
-  if (!files.value.find(f => f.id === newId) && files.value.length > 0) {
-    activeFileId.value = files.value[0].id
-  }
-}, { immediate: true })
+watch(
+  activeFileId,
+  (newId) => {
+    if (!files.value.find((f) => f.id === newId) && files.value.length > 0) {
+      activeFileId.value = files.value[0].id
+    }
+  },
+  { immediate: true }
+)
 
 // 持久化存储
-watch([files, activeFileId], () => {
-  localStorage.setItem('runjs_files', JSON.stringify(files.value))
-  localStorage.setItem('runjs_active_file_id', activeFileId.value)
-}, { deep: true })
+watch(
+  [files, activeFileId],
+  () => {
+    localStorage.setItem('runjs_files', JSON.stringify(files.value))
+    localStorage.setItem('runjs_active_file_id', activeFileId.value)
+  },
+  { deep: true }
+)
 
 // 新建文件
 const addFile = () => {
@@ -108,7 +106,7 @@ const addFile = () => {
 const closeFile = (id: string) => {
   if (files.value.length <= 1) return // 至少保留一个文件
 
-  const index = files.value.findIndex(f => f.id === id)
+  const index = files.value.findIndex((f) => f.id === id)
   if (index === -1) return
 
   // 如果关闭的是当前激活的文件，需要切换到其他文件
@@ -159,7 +157,10 @@ const runCode = async () => {
   error.value = ''
 
   try {
-    const result = await window.api.codeRunner.run(activeFile.value.content, activeFile.value.language)
+    const result = await window.api.codeRunner.run(
+      activeFile.value.content,
+      activeFile.value.language
+    )
     output.value = result.output
     error.value = result.error || ''
     duration.value = result.duration
@@ -219,14 +220,22 @@ onUnmounted(() => {
         <button
           @click="activePanel = 'npm'"
           class="flex-1 py-3 text-sm font-medium transition-all"
-          :class="activePanel === 'npm' ? 'text-indigo-400 bg-indigo-500/10 border-b-2 border-indigo-500' : 'text-gray-400 hover:text-white hover:bg-[#2a2a3e]'"
+          :class="
+            activePanel === 'npm'
+              ? 'text-indigo-400 bg-indigo-500/10 border-b-2 border-indigo-500'
+              : 'text-gray-400 hover:text-white hover:bg-[#2a2a3e]'
+          "
         >
           NPM 包
         </button>
         <button
           @click="activePanel = 'files'"
           class="flex-1 py-3 text-sm font-medium transition-all"
-          :class="activePanel === 'files' ? 'text-indigo-400 bg-indigo-500/10 border-b-2 border-indigo-500' : 'text-gray-400 hover:text-white hover:bg-[#2a2a3e]'"
+          :class="
+            activePanel === 'files'
+              ? 'text-indigo-400 bg-indigo-500/10 border-b-2 border-indigo-500'
+              : 'text-gray-400 hover:text-white hover:bg-[#2a2a3e]'
+          "
         >
           最近文件
         </button>
@@ -236,8 +245,8 @@ onUnmounted(() => {
       <div class="panel-content flex-1 overflow-hidden">
         <Transition name="fade" mode="out-in">
           <NpmPanel v-if="activePanel === 'npm'" />
-          <FilePanel 
-            v-else 
+          <FilePanel
+            v-else
             :files="files"
             :active-id="activeFileId"
             @file-select="(file) => switchFile(file.id)"
