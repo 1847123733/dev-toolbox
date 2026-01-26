@@ -169,6 +169,7 @@ function createWindow(): void {
             }
           })
 
+          // @ts-ignore: pipe exists on IncomingMessage but types might be missing
           response.pipe(file)
 
           file.on('finish', () => {
@@ -209,7 +210,7 @@ function createWindow(): void {
   ipcMain.handle('app:setProxy', async (_, proxyUrl: string) => {
     try {
       // 设置代理
-      const config = proxyUrl ? { proxyRules: proxyUrl } : { mode: 'direct' }
+      const config = proxyUrl ? { proxyRules: proxyUrl } : { mode: 'direct' as const }
       await mainWindow.webContents.session.setProxy(config)
       notify.success(proxyUrl ? '代理已设置' : '代理已清除')
       return { success: true }
