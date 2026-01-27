@@ -94,13 +94,17 @@ function createWindow(): void {
             try {
               const resData = JSON.parse(data)
               const release = Array.isArray(resData) ? resData[0] : resData
-              const latestVersion = release?.tag_name?.replace('v', '') || ''
+              const tagName = release?.tag_name || ''
+              const latestVersion = tagName.replace(/^v/i, '')
               const currentVersion = app.getVersion()
               const hasUpdate = latestVersion && latestVersion !== currentVersion
 
-              const exeAsset = release?.assets?.find((a: any) => a.name?.endsWith('.exe'))
-              // 私有仓库需要使用 API URL 下载 (url 字段)，公开仓库使用 browser_download_url
-              const downloadUrl = GITHUB_TOKEN ? exeAsset?.url : exeAsset?.browser_download_url
+              // 通过 tag 组装下载链接，避免 API 资产链接导致文件名为数字
+              const fileName = latestVersion ? `Setup.${latestVersion}.exe` : ''
+              const downloadUrl =
+                tagName && fileName
+                  ? `https://github.com/1847123733/dev-toolbox/releases/download/${tagName}/${fileName}`
+                  : ''
 
               resolve({
                 success: true,
