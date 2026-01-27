@@ -5,7 +5,7 @@ import Sidebar from './components/Sidebar.vue'
 import GlobalNotification from './components/GlobalNotification.vue'
 
 // 当前选中的工具
-const activeTool = ref('runjs')
+const activeTool = ref('home')
 
 // 工具列表
 const tools = [
@@ -17,6 +17,7 @@ const tools = [
 
 // 工具组件映射（懒加载）
 const toolComponents: Record<string, Component> = {
+  home: defineAsyncComponent(() => import('./views/home/Home.vue')),
   runjs: defineAsyncComponent(() => import('./views/runjs/RunJS.vue')),
   domain: defineAsyncComponent(() => import('./views/domainlookup/DomainLookup.vue')),
   dock: defineAsyncComponent(() => import('./views/dock/DockSettings.vue')),
@@ -25,7 +26,7 @@ const toolComponents: Record<string, Component> = {
 }
 
 // 当前活跃的组件
-const activeComponent = computed(() => toolComponents[activeTool.value] || toolComponents.runjs)
+const activeComponent = computed(() => toolComponents[activeTool.value] || toolComponents.home)
 
 const handleToolSelect = (toolId: string) => {
   activeTool.value = toolId
@@ -42,7 +43,7 @@ onMounted(() => {
     <GlobalNotification />
 
     <!-- 标题栏 -->
-    <TitleBar />
+    <TitleBar @go-home="handleToolSelect('home')" />
 
     <!-- 主体内容 -->
     <div class="flex flex-1 overflow-hidden">
@@ -52,7 +53,7 @@ onMounted(() => {
       <!-- 主内容区 -->
       <main class="flex-1 overflow-hidden">
         <KeepAlive>
-          <component :is="activeComponent" :key="activeTool" />
+          <component :is="activeComponent" :key="activeTool" @open-tool="handleToolSelect" />
         </KeepAlive>
       </main>
     </div>
