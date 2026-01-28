@@ -1,10 +1,6 @@
 ﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 
-const emit = defineEmits<{
-  'go-home': []
-}>()
-
 const isMaximized = ref(false)
 
 const minimize = () => window.api.window.minimize()
@@ -25,9 +21,8 @@ onMounted(async () => {
   >
     <!-- 左侧 Logo -->
     <button
-      class="no-drag flex items-center gap-3 group cursor-pointer"
+      class="no-drag flex items-center gap-3 group"
       title="首页"
-      @click="emit('go-home')"
       style="-webkit-app-region: no-drag"
     >
       <div

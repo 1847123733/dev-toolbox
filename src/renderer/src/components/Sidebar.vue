@@ -14,6 +14,7 @@ defineProps<{
 
 const emit = defineEmits<{
   select: [toolId: string]
+  'go-home': []
 }>()
 
 // 版本号
@@ -111,7 +112,7 @@ const getIcon = (iconName: string) => {
     class="sidebar w-16 bg-[var(--color-surface-light)] border-r border-[var(--color-border)] flex flex-col items-center py-4"
   >
     <!-- Logo 区域 -->
-    <div class="logo-area mb-6">
+    <div class="logo-area mb-6 cursor-pointer" @click="emit('go-home')">
       <div
         class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/30"
       >

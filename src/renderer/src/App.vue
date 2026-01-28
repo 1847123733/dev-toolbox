@@ -43,12 +43,12 @@ onMounted(() => {
     <GlobalNotification />
 
     <!-- 标题栏 -->
-    <TitleBar @go-home="handleToolSelect('home')" />
+    <TitleBar  />
 
     <!-- 主体内容 -->
     <div class="flex flex-1 overflow-hidden">
       <!-- 左侧工具栏 -->
-      <Sidebar :tools="tools" :active-tool="activeTool" @select="handleToolSelect" />
+      <Sidebar :tools="tools" :active-tool="activeTool" @select="handleToolSelect" @go-home="handleToolSelect('home')" />
 
       <!-- 主内容区 -->
       <main class="flex-1 overflow-hidden">

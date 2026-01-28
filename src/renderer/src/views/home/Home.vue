@@ -22,14 +22,24 @@ const timeDisplay = computed(() => {
   })
 })
 
-onMounted(() => {
-  timer = setInterval(() => {
+const isToDo = ref(false)
+// 问询模式更新时间
+const inquiryMode = () => {
+  requestAnimationFrame(() => {
     currentTime.value = new Date()
-  }, 1000)
+    if (isToDo.value) {
+      inquiryMode()
+    }
+  })
+}
+
+onMounted(() => {
+  isToDo.value = true
+  inquiryMode()
 })
 
 onUnmounted(() => {
-  clearInterval(timer)
+  isToDo.value = false
 })
 </script>
 
