@@ -3,7 +3,6 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 // --- State & Logic ---
 const currentTime = ref(new Date())
-let timer: ReturnType<typeof setInterval>
 
 const greeting = computed(() => {
   const hour = currentTime.value.getHours()
