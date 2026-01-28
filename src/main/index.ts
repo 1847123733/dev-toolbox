@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, net } from 'electron'
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -11,16 +11,13 @@ import { notify } from './services/notification'
 // 配置 autoUpdater
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
+autoUpdater.allowPrerelease = true
 
 // Windows 上透明窗口需要禁用某些 GPU 功能以避免标题栏问题
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('disable-gpu-compositing')
 }
 
-// TODO: 如果是私有仓库，请在此处填入 GitHub Personal Access Token
-// 注意：客户端硬编码 Token 有安全风险，仅建议个人或内部使用
-const GITHUB_TOKEN =
-  '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'
 
 function createWindow(): void {
   // 创建浏览器窗口
@@ -39,6 +36,22 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false
     }
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Math.round(progress.percent || 0)
+    mainWindow.webContents.send('app:downloadProgress', percent)
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    notify.success('Update downloaded, installing...')
+    mainWindow.webContents.send('app:updateDownloaded')
+    autoUpdater.quitAndInstall(true, true)
+  })
+
+  autoUpdater.on('error', (error) => {
+    console.error('AutoUpdater error:', error)
+    notify.error('Update failed')
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -73,138 +86,59 @@ function createWindow(): void {
   // 检查最新版本
   ipcMain.handle('app:checkUpdate', async () => {
     try {
-      return new Promise((resolve) => {
-        notify.info('检查中')
-        const request = net.request({
-          method: 'GET',
-          protocol: 'https:',
-          hostname: 'api.github.com',
-          path: '/repos/1847123733/dev-toolbox/releases?per_page=1'
-        })
-
-        request.setHeader('User-Agent', 'dev-toolbox')
-        if (GITHUB_TOKEN) {
-          request.setHeader('Authorization', `token ${GITHUB_TOKEN}`)
+      if (!app.isPackaged) {
+        const currentVersion = app.getVersion()
+        return {
+          success: true,
+          currentVersion,
+          latestVersion: currentVersion,
+          hasUpdate: false,
+          releaseUrl: 'https://github.com/1847123733/dev-toolbox/releases',
+          downloadUrl: ''
         }
+      }
 
-        request.on('response', (response) => {
-          let data = ''
-          response.on('data', (chunk) => (data += chunk))
-          response.on('end', () => {
-            try {
-              const resData = JSON.parse(data)
-              const release = Array.isArray(resData) ? resData[0] : resData
-              const tagName = release?.tag_name || ''
-              const latestVersion = tagName.replace(/^v/i, '')
-              const currentVersion = app.getVersion()
-              const hasUpdate = latestVersion && latestVersion !== currentVersion
+      const result = await autoUpdater.checkForUpdates()
+      const info = result?.updateInfo
+      const currentVersion = app.getVersion()
+      const latestVersion = info?.version || ''
+      const hasUpdate = latestVersion ? latestVersion !== currentVersion : false
+      const tagName = latestVersion ? `v${latestVersion}` : ''
+      const releaseUrl = tagName
+        ? `https://github.com/1847123733/dev-toolbox/releases/tag/${tagName}`
+        : 'https://github.com/1847123733/dev-toolbox/releases'
 
-              // 通过 tag 组装下载链接，避免 API 资产链接导致文件名为数字
-              const fileName = latestVersion ? `Setup.${latestVersion}.exe` : ''
-              const downloadUrl =
-                tagName && fileName
-                  ? `https://github.com/1847123733/dev-toolbox/releases/download/${tagName}/${fileName}`
-                  : ''
-
-              resolve({
-                success: true,
-                currentVersion,
-                latestVersion,
-                hasUpdate,
-                releaseUrl:
-                  release?.html_url || 'https://github.com/1847123733/dev-toolbox/releases',
-                downloadUrl: downloadUrl || ''
-              })
-            } catch {
-              resolve({ success: false, error: '解析失败' })
-            }
-          })
-        })
-
-        request.on('error', () => {
-          notify.error('网络错误')
-          resolve({ success: false, error: '网络错误' })
-        })
-
-        request.end()
-      })
-    } catch {
-      notify.error('检查失败')
-      return { success: false, error: '检查失败' }
+      return {
+        success: true,
+        currentVersion,
+        latestVersion,
+        hasUpdate,
+        releaseUrl,
+        downloadUrl: ''
+      }
+    } catch (error) {
+      console.error('Check update failed:', error)
+      notify.error('Check update failed')
+      return { success: false, error: 'Check update failed' }
     }
   })
 
-  // 下载更新
-  ipcMain.handle('app:downloadUpdate', async (_, downloadUrl: string) => {
-    notify.info('正在开始下载新版本...')
+  ipcMain.handle('app:downloadUpdate', async (_event, _downloadUrl?: string) => {
     try {
-      const fs = await import('fs')
-      const path = await import('path')
-
-      const fileName = downloadUrl.split('/').pop() || 'update.exe'
-      const filePath = path.join(app.getPath('downloads'), fileName)
-
-      return new Promise((resolve) => {
-        const file = fs.createWriteStream(filePath)
-
-        const request = net.request(downloadUrl)
-        request.setHeader('User-Agent', 'dev-toolbox')
-        request.setHeader('Accept', 'application/octet-stream')
-        if (GITHUB_TOKEN) {
-          request.setHeader('Authorization', `token ${GITHUB_TOKEN}`)
-        }
-
-        request.on('response', (response) => {
-          // net 模块会自动处理重定向，这里无需手动处理 301/302
-          if (response.statusCode >= 400) {
-            notify.error('下载失败: ' + response.statusCode)
-            resolve({ success: false, error: '下载失败' })
-            return
-          }
-
-          const totalSize = parseInt((response.headers['content-length'] as string) || '0', 10)
-          let downloadedSize = 0
-
-          response.on('data', (chunk) => {
-            downloadedSize += chunk.length
-            if (totalSize > 0) {
-              const progress = Math.round((downloadedSize / totalSize) * 100)
-              mainWindow.webContents.send('app:downloadProgress', progress)
-            }
-          })
-
-          // @ts-ignore: pipe exists on IncomingMessage but types might be missing
-          response.pipe(file)
-
-          file.on('finish', () => {
-            file.close()
-            notify.success('下载完成，准备安装')
-            resolve({ success: true, filePath })
-          })
-
-          file.on('error', () => {
-            // 文件写入错误
-            notify.error('文件写入失败')
-            resolve({ success: false, error: '文件写入失败' })
-          })
-        })
-
-        request.on('error', () => {
-          notify.error('下载出错，已跳转浏览器')
-          shell.openExternal(downloadUrl)
-          resolve({ success: false, error: '已在浏览器中打开下载' })
-        })
-
-        request.end()
-      })
-    } catch {
-      notify.error('下载异常，已跳转浏览器')
-      shell.openExternal(downloadUrl)
-      return { success: false, error: '已在浏览器中打开下载' }
+      await autoUpdater.downloadUpdate()
+      return { success: true }
+    } catch (error) {
+      console.error('Download update failed:', error)
+      notify.error('Download update failed')
+      return { success: false, error: 'Download update failed' }
     }
   })
 
-  // 打开下载的文件（运行安装程序）
+  ipcMain.handle('app:installUpdate', async () => {
+    autoUpdater.quitAndInstall(true, true)
+    return { success: true }
+  })
+
   ipcMain.handle('app:openFile', async (_, filePath: string) => {
     shell.openPath(filePath)
     return { success: true }

@@ -100,14 +100,15 @@ interface AppAPI {
     downloadUrl?: string
     error?: string
   }>
-  downloadUpdate: (url: string) => Promise<{
+  downloadUpdate: (url?: string) => Promise<{
     success: boolean
-    filePath?: string
     error?: string
   }>
+  installUpdate: () => Promise<{ success: boolean }>
   openFile: (filePath: string) => Promise<{ success: boolean }>
   setProxy: (proxyUrl: string) => Promise<{ success: boolean; error?: string }>
   onDownloadProgress: (callback: (progress: number) => void) => void
+  onUpdateDownloaded: (callback: () => void) => void
 }
 
 interface API {

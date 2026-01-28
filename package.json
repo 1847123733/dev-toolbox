@@ -95,6 +95,13 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "1847123733",
+        "repo": "dev-toolbox"
+      }
+    ]
   }
 }

@@ -1,43 +1,38 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-
 interface Tool {
   id: string
   name: string
   icon: string
 }
-
 defineProps<{
   tools: Tool[]
   activeTool: string
 }>()
-
 const emit = defineEmits<{
   select: [toolId: string]
   'go-home': []
 }>()
-
 // 版本号
 const version = ref('')
 const hasUpdate = ref(false)
 const latestVersion = ref('')
-const releaseUrl = ref('')
-const downloadUrl = ref('')
 const checking = ref(false)
 const downloading = ref(false)
 const downloadProgress = ref(0)
-const downloadedFilePath = ref('')
-
+const updateDownloaded = ref(false)
 onMounted(async () => {
   version.value = await window.api.app.getVersion()
   // 监听下载进度
   window.api.app.onDownloadProgress((progress) => {
     downloadProgress.value = progress
   })
+  window.api.app.onUpdateDownloaded(() => {
+    updateDownloaded.value = true
+  })
   // 自动检查更新
   checkUpdate()
 })
-
 // 检查更新
 const checkUpdate = async () => {
   if (checking.value) return
@@ -47,8 +42,6 @@ const checkUpdate = async () => {
     if (result.success) {
       hasUpdate.value = result.hasUpdate || false
       latestVersion.value = result.latestVersion || ''
-      releaseUrl.value = result.releaseUrl || ''
-      downloadUrl.value = result.downloadUrl || ''
     }
   } catch (e) {
     console.error('检查更新失败', e)
@@ -56,47 +49,36 @@ const checkUpdate = async () => {
     checking.value = false
   }
 }
-
 // 下载更新
 const downloadUpdate = async () => {
-  if (downloading.value || !downloadUrl.value) return
+  if (downloading.value) return
   downloading.value = true
   downloadProgress.value = 0
+  updateDownloaded.value = false
 
   try {
-    const result = await window.api.app.downloadUpdate(downloadUrl.value)
-    if (result.success && result.filePath) {
-      downloadedFilePath.value = result.filePath
-      // 下载完成后自动打开安装程序
-      await window.api.app.openFile(result.filePath)
+    const result = await window.api.app.downloadUpdate()
+    if (result.success) {
+      updateDownloaded.value = true
     }
   } catch (e) {
-    console.error('下载失败', e)
+    console.error('Download failed', e)
   } finally {
     downloading.value = false
   }
 }
 
-// 点击版本号
 const handleVersionClick = () => {
   if (downloading.value) return
-  if (downloadedFilePath.value) {
-    // 已下载，再次打开安装程序
-    window.api.app.openFile(downloadedFilePath.value)
+  if (updateDownloaded.value) {
+    window.api.app.installUpdate()
   } else if (hasUpdate.value) {
-    // 有更新，开始下载
-    if (downloadUrl.value) {
-      downloadUpdate()
-    } else if (releaseUrl.value) {
-      window.open(releaseUrl.value, '_blank')
-    }
+    downloadUpdate()
   } else {
-    // 检查更新
     checkUpdate()
   }
 }
 
-// 图标映射
 const getIcon = (iconName: string) => {
   const icons: Record<string, string> = {
     code: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />`,
@@ -106,7 +88,6 @@ const getIcon = (iconName: string) => {
   return icons[iconName] || icons.code
 }
 </script>
-
 <template>
   <aside
     class="sidebar w-16 bg-[var(--color-surface-light)] border-r border-[var(--color-border)] flex flex-col items-center py-4"
@@ -120,10 +101,8 @@ const getIcon = (iconName: string) => {
       </div>
       <span class="text-[10px] text-[var(--color-text-muted)] mt-1 block text-center">MyUnit</span>
     </div>
-
     <!-- 分隔线 -->
     <div class="w-8 h-px bg-[var(--color-border)] mb-4"></div>
-
     <!-- 工具列表 -->
     <nav class="tools-nav flex-1 w-full px-2 space-y-2">
       <button
@@ -148,7 +127,6 @@ const getIcon = (iconName: string) => {
         <span class="text-[9px] font-medium">{{ tool.name }}</span>
       </button>
     </nav>
-
     <!-- 底部设置按钮 -->
     <div class="mt-auto px-2 w-full">
       <button
@@ -182,7 +160,7 @@ const getIcon = (iconName: string) => {
         :class="[
           downloading
             ? 'text-blue-400'
-            : downloadedFilePath
+            : updateDownloaded
               ? 'text-green-400'
               : hasUpdate
                 ? 'text-yellow-400'
@@ -191,7 +169,7 @@ const getIcon = (iconName: string) => {
         :title="
           downloading
             ? `下载中 ${downloadProgress}%`
-            : downloadedFilePath
+            : updateDownloaded
               ? '点击运行安装程序'
               : hasUpdate
                 ? `有新版本 v${latestVersion}，点击下载`
@@ -211,7 +189,7 @@ const getIcon = (iconName: string) => {
           </svg>
           {{ downloadProgress }}%
         </span>
-        <span v-else-if="downloadedFilePath" class="flex items-center justify-center gap-1">
+        <span v-else-if="updateDownloaded" class="flex items-center justify-center gap-1">
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -238,12 +216,10 @@ const getIcon = (iconName: string) => {
     </div>
   </aside>
 </template>
-
 <style scoped>
 .tool-btn {
   position: relative;
 }
-
 .tool-btn::before {
   content: '';
   position: absolute;
@@ -256,7 +232,6 @@ const getIcon = (iconName: string) => {
   border-radius: 0 2px 2px 0;
   transition: height 0.2s ease;
 }
-
 .tool-btn.bg-gradient-to-br::before {
   height: 24px;
 }

@@ -24,11 +24,15 @@ const api = {
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
-    downloadUpdate: (url: string) => ipcRenderer.invoke('app:downloadUpdate', url),
+    downloadUpdate: (url?: string) => ipcRenderer.invoke('app:downloadUpdate', url),
+    installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
     openFile: (filePath: string) => ipcRenderer.invoke('app:openFile', filePath),
     setProxy: (proxyUrl: string) => ipcRenderer.invoke('app:setProxy', proxyUrl),
     onDownloadProgress: (callback: (progress: number) => void) => {
       ipcRenderer.on('app:downloadProgress', (_, progress) => callback(progress))
+    },
+    onUpdateDownloaded: (callback: () => void) => {
+      ipcRenderer.on('app:updateDownloaded', () => callback())
     }
   },
 
