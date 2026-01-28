@@ -69,8 +69,19 @@ function createWindow(): void {
 
   autoUpdater.on('error', (error) => {
     console.error('AutoUpdater error:', error)
-    const message =
-      error instanceof Error && error.message ? `更新失败: ${error.message}` : '更新失败'
+    let message = '更新失败'
+    if (error instanceof Error && error.message) {
+      // 如果是网络超时或连接问题，提示用户设置代理
+      if (
+        error.message.includes('TIMED_OUT') ||
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ENOTFOUND')
+      ) {
+        message = '网络连接失败，请在设置中配置代理后重试'
+      } else {
+        message = `更新失败: ${error.message}`
+      }
+    }
     notify.error(message)
     lastUpdaterErrorAt = Date.now()
   })
@@ -149,15 +160,26 @@ function createWindow(): void {
 
   ipcMain.handle('app:downloadUpdate', async (_event, _downloadUrl?: string) => {
     try {
+      notify.success(`开始下载更新: ${_downloadUrl || ''}`)
       ensureUpdaterConfigured()
       await autoUpdater.downloadUpdate()
       return { success: true }
     } catch (error) {
       console.error('Download update failed:', error)
-      if (Date.now() - lastUpdaterErrorAt > 1000) {
-        notify.error('下载更新失败')
+      let errorMsg = '下载更新失败'
+      if (error instanceof Error && error.message) {
+        if (
+          error.message.includes('TIMED_OUT') ||
+          error.message.includes('ECONNREFUSED') ||
+          error.message.includes('ENOTFOUND')
+        ) {
+          errorMsg = '网络连接失败，请在设置中配置代理后重试'
+        }
       }
-      return { success: false, error: '下载更新失败' }
+      if (Date.now() - lastUpdaterErrorAt > 1000) {
+        notify.error(errorMsg)
+      }
+      return { success: false, error: errorMsg }
     }
   })
 

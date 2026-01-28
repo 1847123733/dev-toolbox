@@ -32,8 +32,18 @@ const handleToolSelect = (toolId: string) => {
   activeTool.value = toolId
 }
 
-onMounted(() => {
+onMounted(async () => {
   console.log('App mounted')
+  // 启动时自动加载保存的代理设置
+  const savedProxy = localStorage.getItem('app_proxy_url')
+  if (savedProxy) {
+    try {
+      await window.api.app.setProxy(savedProxy)
+      console.log('Proxy loaded:', savedProxy)
+    } catch (error) {
+      console.error('Failed to load proxy:', error)
+    }
+  }
 })
 </script>
 
@@ -43,12 +53,17 @@ onMounted(() => {
     <GlobalNotification />
 
     <!-- 标题栏 -->
-    <TitleBar  />
+    <TitleBar />
 
     <!-- 主体内容 -->
     <div class="flex flex-1 overflow-hidden">
       <!-- 左侧工具栏 -->
-      <Sidebar :tools="tools" :active-tool="activeTool" @select="handleToolSelect" @go-home="handleToolSelect('home')" />
+      <Sidebar
+        :tools="tools"
+        :active-tool="activeTool"
+        @select="handleToolSelect"
+        @go-home="handleToolSelect('home')"
+      />
 
       <!-- 主内容区 -->
       <main class="flex-1 overflow-hidden">
