@@ -29,18 +29,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Calculate Version
+      - name: Read package.json version
         id: version
         run: |
-          RUN_NUM=${{ github.run_number }}
-          MINOR=$((RUN_NUM / 10))
-          PATCH=$((RUN_NUM % 10))
-          VERSION="0.${MINOR}.${PATCH}"
+          VERSION=$(node -p "require('./package.json').version")
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
         shell: bash
-
-      - name: Update package.json version
-        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Build for Windows
         run: npm run build:win

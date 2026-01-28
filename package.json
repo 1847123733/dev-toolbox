@@ -10,6 +10,7 @@
   "homepage": "https://github.com/1847123733/dev-toolbox",
   "productName": "开发者工具箱",
   "scripts": {
+    "bump:patch": "node scripts/bump-version.js",
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
