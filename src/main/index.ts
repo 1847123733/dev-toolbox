@@ -151,10 +151,20 @@ function createWindow(): void {
       }
     } catch (error) {
       console.error('Check update failed:', error)
-      if (Date.now() - lastUpdaterErrorAt > 1000) {
-        notify.error('检查更新失败')
+      let errorMsg = '检查更新失败'
+      if (error instanceof Error && error.message) {
+        if (
+          error.message.includes('TIMED_OUT') ||
+          error.message.includes('ECONNREFUSED') ||
+          error.message.includes('ENOTFOUND')
+        ) {
+          errorMsg = '网络连接失败，请在设置中配置代理后重试'
+        }
       }
-      return { success: false, error: '检查更新失败' }
+      if (Date.now() - lastUpdaterErrorAt > 1000) {
+        notify.error(errorMsg)
+      }
+      return { success: false, error: errorMsg }
     }
   })
 
