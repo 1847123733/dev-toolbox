@@ -8,6 +8,11 @@ import { setupDomainLookup } from './services/domainLookup'
 import { setupDockService, closeDockWindow } from './services/dockService'
 import { notify } from './services/notification'
 
+const UPDATER_REPO_OWNER = '1847123733'
+const UPDATER_REPO_NAME = 'dev-toolbox'
+let updaterConfigured = false
+let lastUpdaterErrorAt = 0
+
 // 配置 autoUpdater
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
@@ -18,6 +23,19 @@ if (process.platform === 'win32') {
   app.commandLine.appendSwitch('disable-gpu-compositing')
 }
 
+function ensureUpdaterConfigured(): void {
+  if (updaterConfigured || !app.isPackaged) return
+  try {
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: UPDATER_REPO_OWNER,
+      repo: UPDATER_REPO_NAME
+    })
+    updaterConfigured = true
+  } catch (error) {
+    console.warn('Failed to configure autoUpdater feed:', error)
+  }
+}
 
 function createWindow(): void {
   // 创建浏览器窗口
@@ -51,7 +69,10 @@ function createWindow(): void {
 
   autoUpdater.on('error', (error) => {
     console.error('AutoUpdater error:', error)
-    notify.error('Update failed')
+    const message =
+      error instanceof Error && error.message ? `Update failed: ${error.message}` : 'Update failed'
+    notify.error(message)
+    lastUpdaterErrorAt = Date.now()
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -98,6 +119,7 @@ function createWindow(): void {
         }
       }
 
+      ensureUpdaterConfigured()
       const result = await autoUpdater.checkForUpdates()
       const info = result?.updateInfo
       const currentVersion = app.getVersion()
@@ -118,18 +140,23 @@ function createWindow(): void {
       }
     } catch (error) {
       console.error('Check update failed:', error)
-      notify.error('Check update failed')
+      if (Date.now() - lastUpdaterErrorAt > 1000) {
+        notify.error('Check update failed')
+      }
       return { success: false, error: 'Check update failed' }
     }
   })
 
   ipcMain.handle('app:downloadUpdate', async (_event, _downloadUrl?: string) => {
     try {
+      ensureUpdaterConfigured()
       await autoUpdater.downloadUpdate()
       return { success: true }
     } catch (error) {
       console.error('Download update failed:', error)
-      notify.error('Download update failed')
+      if (Date.now() - lastUpdaterErrorAt > 1000) {
+        notify.error('Download update failed')
+      }
       return { success: false, error: 'Download update failed' }
     }
   })
