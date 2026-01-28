@@ -49,3 +49,4 @@ jobs:
           files: |
             dist/*.exe
             dist/*.zip
+            dist/*.yml
