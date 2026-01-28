@@ -62,7 +62,7 @@ function createWindow(): void {
   })
 
   autoUpdater.on('update-downloaded', () => {
-    notify.success('Update downloaded, installing...')
+    notify.success('更新已下载，正在安装...')
     mainWindow.webContents.send('app:updateDownloaded')
     autoUpdater.quitAndInstall(true, true)
   })
@@ -70,7 +70,7 @@ function createWindow(): void {
   autoUpdater.on('error', (error) => {
     console.error('AutoUpdater error:', error)
     const message =
-      error instanceof Error && error.message ? `Update failed: ${error.message}` : 'Update failed'
+      error instanceof Error && error.message ? `更新失败: ${error.message}` : '更新失败'
     notify.error(message)
     lastUpdaterErrorAt = Date.now()
   })
@@ -141,9 +141,9 @@ function createWindow(): void {
     } catch (error) {
       console.error('Check update failed:', error)
       if (Date.now() - lastUpdaterErrorAt > 1000) {
-        notify.error('Check update failed')
+        notify.error('检查更新失败')
       }
-      return { success: false, error: 'Check update failed' }
+      return { success: false, error: '检查更新失败' }
     }
   })
 
@@ -155,9 +155,9 @@ function createWindow(): void {
     } catch (error) {
       console.error('Download update failed:', error)
       if (Date.now() - lastUpdaterErrorAt > 1000) {
-        notify.error('Download update failed')
+        notify.error('下载更新失败')
       }
-      return { success: false, error: 'Download update failed' }
+      return { success: false, error: '下载更新失败' }
     }
   })
 
@@ -174,15 +174,23 @@ function createWindow(): void {
   // 设置代理
   ipcMain.handle('app:setProxy', async (_, proxyUrl: string) => {
     try {
-      // 设置代理
+      // 设置代理（同时应用到 autoUpdater）
       const config = proxyUrl ? { proxyRules: proxyUrl } : { mode: 'direct' as const }
       await mainWindow.webContents.session.setProxy(config)
+      // 设置环境变量让 autoUpdater 也使用代理
+      if (proxyUrl) {
+        process.env.HTTPS_PROXY = proxyUrl
+        process.env.HTTP_PROXY = proxyUrl
+      } else {
+        delete process.env.HTTPS_PROXY
+        delete process.env.HTTP_PROXY
+      }
       notify.success(proxyUrl ? '代理已设置' : '代理已清除')
       return { success: true }
     } catch (error) {
       console.error('Failed to set proxy:', error)
       notify.error('设置代理失败')
-      return { success: false, error: 'Set proxy failed' }
+      return { success: false, error: '设置代理失败' }
     }
   })
 
