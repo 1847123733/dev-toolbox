@@ -251,8 +251,8 @@
       magnification: true
     };
 
-    // Dock 应用列表
-    const dockApps = [
+    // Dock 应用列表（默认值，可通过配置覆盖）
+    let dockApps = [
       { id: 'finder', name: '访达', icon: 'finder', action: 'openFolder' },
       { id: 'terminal', name: '终端', icon: 'terminal', action: 'openTerminal' },
       { id: 'browser', name: '浏览器', icon: 'browser', action: 'openBrowser' },
@@ -446,6 +446,10 @@
     // 更新配置
     function updateConfig(config) {
       dockConfig = { ...dockConfig, ...config };
+      // 更新应用列表
+      if (config.apps && Array.isArray(config.apps) && config.apps.length > 0) {
+        dockApps = config.apps;
+      }
       initDock();
     }
 

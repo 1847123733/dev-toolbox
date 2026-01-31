@@ -226,6 +226,28 @@ function createWindow(): void {
     }
   })
 
+  // 开机自启动
+  ipcMain.handle('app:getAutoLaunch', () => {
+    const settings = app.getLoginItemSettings()
+    return settings.openAtLogin
+  })
+
+  ipcMain.handle('app:setAutoLaunch', async (_, enabled: boolean) => {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: enabled,
+        // Windows 上可选：以隐藏方式启动
+        openAsHidden: false
+      })
+      notify.success(enabled ? '已开启开机自启动' : '已关闭开机自启动')
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to set auto launch:', error)
+      notify.error('设置开机自启动失败')
+      return { success: false, error: '设置开机自启动失败' }
+    }
+  })
+
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('window:maximized-change', true)
   })

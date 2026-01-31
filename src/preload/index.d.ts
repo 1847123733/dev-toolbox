@@ -11,6 +11,27 @@ interface WindowAPI {
   onMaximizedChange: (callback: (isMaximized: boolean) => void) => void
 }
 
+interface AppAPI {
+  getVersion: () => Promise<string>
+  checkUpdate: () => Promise<{
+    success: boolean
+    currentVersion?: string
+    latestVersion?: string
+    hasUpdate?: boolean
+    releaseUrl?: string
+    downloadUrl?: string
+    error?: string
+  }>
+  downloadUpdate: (url?: string) => Promise<{ success: boolean; error?: string }>
+  installUpdate: () => Promise<{ success: boolean }>
+  openFile: (filePath: string) => Promise<{ success: boolean }>
+  setProxy: (proxyUrl: string) => Promise<{ success: boolean; error?: string }>
+  getAutoLaunch: () => Promise<boolean>
+  setAutoLaunch: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  onDownloadProgress: (callback: (progress: number) => void) => void
+  onUpdateDownloaded: (callback: () => void) => void
+}
+
 // 全局通知 API
 interface NotificationAPI {
   onNotify: (callback: (message: string, type: NotificationType) => void) => void
@@ -149,6 +170,7 @@ interface DockAPI {
 
 interface API {
   window: WindowAPI
+  app: AppAPI
   notification: NotificationAPI
   codeRunner: CodeRunnerAPI
   npm: NpmAPI

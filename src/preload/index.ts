@@ -28,6 +28,8 @@ const api = {
     installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
     openFile: (filePath: string) => ipcRenderer.invoke('app:openFile', filePath),
     setProxy: (proxyUrl: string) => ipcRenderer.invoke('app:setProxy', proxyUrl),
+    getAutoLaunch: () => ipcRenderer.invoke('app:getAutoLaunch'),
+    setAutoLaunch: (enabled: boolean) => ipcRenderer.invoke('app:setAutoLaunch', enabled),
     onDownloadProgress: (callback: (progress: number) => void) => {
       ipcRenderer.on('app:downloadProgress', (_, progress) => callback(progress))
     },

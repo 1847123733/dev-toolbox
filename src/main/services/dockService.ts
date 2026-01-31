@@ -1,15 +1,28 @@
 import { BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import { spawn } from 'child_process'
 
 let dockWindow: BrowserWindow | null = null
 let mainWindow: BrowserWindow | null = null
 
+// Dock 应用项接口
+interface DockApp {
+  id: string
+  name: string
+  icon: string
+  action: string
+  actionValue?: string
+  type?: 'separator'
+}
+
+// Dock 设置接口
 interface DockSettings {
   position: 'bottom' | 'left' | 'right'
   iconSize: number
   autoHide: boolean
   magnification: boolean
+  apps: DockApp[]
 }
 
 // 计算 Dock 窗口的位置和大小
@@ -18,10 +31,12 @@ function calculateDockBounds(settings: DockSettings) {
   const { width: screenWidth, height: screenHeight } = display.workAreaSize
 
   // 根据图标大小和应用数量计算 Dock 尺寸
-  const iconCount = 5 // 应用数量
+  const iconCount = settings.apps?.filter(app => app.type !== 'separator').length || 5
+  const separatorCount = settings.apps?.filter(app => app.type === 'separator').length || 1
   const padding = 24
   const gap = 4
-  const dockLength = iconCount * settings.iconSize + (iconCount - 1) * gap + padding * 2
+  const separatorWidth = 20
+  const dockLength = iconCount * settings.iconSize + (iconCount - 1) * gap + separatorCount * separatorWidth + padding * 2
 
   let width: number, height: number, x: number, y: number
 
@@ -162,11 +177,17 @@ export function setupDockService(mainWin: BrowserWindow): void {
       case 'openTerminal':
         // 打开终端
         if (process.platform === 'win32') {
-          shell.openExternal('cmd')
+          // Windows: 使用 spawn 启动命令提示符
+          spawn('cmd.exe', [], {
+            detached: true,
+            stdio: 'ignore',
+            shell: true
+          }).unref()
         } else if (process.platform === 'darwin') {
-          shell.openExternal('Terminal.app')
+          spawn('open', ['-a', 'Terminal'], { detached: true }).unref()
         } else {
-          shell.openExternal('x-terminal-emulator')
+          // Linux: 尝试常见的终端模拟器
+          spawn('x-terminal-emulator', [], { detached: true }).unref()
         }
         break
 
@@ -176,7 +197,31 @@ export function setupDockService(mainWin: BrowserWindow): void {
         break
 
       default:
-        console.log('Unknown dock action:', action)
+        // 处理自定义动作
+        if (action.startsWith('openUrl:')) {
+          const url = action.substring('openUrl:'.length)
+          shell.openExternal(url)
+        } else if (action.startsWith('openApp:')) {
+          // 获取应用路径，处理可能被转义的反斜杠
+          let appPath = action.substring('openApp:'.length)
+          // 将双反斜杠替换为单反斜杠
+          appPath = appPath.replace(/\\\\/g, '\\')
+
+          // 判断是否是可执行文件
+          if (appPath.toLowerCase().endsWith('.exe')) {
+            // 对于 .exe 文件，使用 spawn 启动
+            spawn(appPath, [], {
+              detached: true,
+              stdio: 'ignore',
+              shell: true
+            }).unref()
+          } else {
+            // 对于其他文件（如 .lnk 快捷方式），使用 shell.openPath
+            shell.openPath(appPath)
+          }
+        } else {
+          console.log('Unknown dock action:', action)
+        }
     }
 
     return { success: true }
