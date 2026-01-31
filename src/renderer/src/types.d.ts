@@ -1,4 +1,4 @@
-export {}
+export { }
 
 interface NpmPackage {
   name: string
@@ -107,6 +107,8 @@ interface AppAPI {
   installUpdate: () => Promise<{ success: boolean }>
   openFile: (filePath: string) => Promise<{ success: boolean }>
   setProxy: (proxyUrl: string) => Promise<{ success: boolean; error?: string }>
+  getAutoLaunch: () => Promise<boolean>
+  setAutoLaunch: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   onDownloadProgress: (callback: (progress: number) => void) => void
   onUpdateDownloaded: (callback: () => void) => void
 }
