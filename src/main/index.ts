@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -7,11 +7,25 @@ import { setupNpmManager } from './services/npmManager'
 import { setupDomainLookup } from './services/domainLookup'
 import { setupDockService, closeDockWindow } from './services/dockService'
 import { notify } from './services/notification'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const AutoLaunch = require('auto-launch')
+
+// 创建 AutoLaunch 实例
+const appLauncher = new AutoLaunch({
+  name: 'Dev Toolbox',
+  isHidden: false
+})
 
 const UPDATER_REPO_OWNER = '1847123733'
 const UPDATER_REPO_NAME = 'dev-toolbox'
 let updaterConfigured = false
 let lastUpdaterErrorAt = 0
+let tray: Tray | null = null
+let isQuitting = false // 是否真正退出应用
+
+// 关闭行为类型: 'ask' = 每次询问, 'minimize' = 最小化到托盘, 'quit' = 直接退出
+type CloseBehavior = 'ask' | 'minimize' | 'quit'
+let closeBehavior: CloseBehavior = 'ask'
 
 // 配置 autoUpdater
 autoUpdater.autoDownload = false
@@ -35,6 +49,59 @@ function ensureUpdaterConfigured(): void {
   } catch (error) {
     console.warn('Failed to configure autoUpdater feed:', error)
   }
+}
+
+// 创建系统托盘
+function createTray(mainWindow: BrowserWindow): void {
+  // 如果托盘已存在，不重复创建
+  if (tray && !tray.isDestroyed()) {
+    return
+  }
+
+  // 创建托盘图标 - 根据打包状态使用不同路径
+  let iconPath: string
+  if (app.isPackaged) {
+    iconPath = join(process.resourcesPath, 'icon.ico')
+  } else {
+    // 开发环境：从项目根目录的 resources 文件夹加载
+    iconPath = join(__dirname, '../../resources/icon.ico')
+  }
+  console.log('Tray icon path:', iconPath)
+  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  tray = new Tray(trayIcon)
+
+  // 托盘菜单
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示主窗口',
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show()
+          mainWindow.focus()
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '退出应用',
+      click: () => {
+        isQuitting = true
+        closeDockWindow()
+        app.quit()
+      }
+    }
+  ])
+
+  tray.setToolTip('Dev Toolbox')
+  tray.setContextMenu(contextMenu)
+
+  // 双击托盘图标显示主窗口
+  tray.on('double-click', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
 }
 
 function createWindow(): void {
@@ -111,7 +178,37 @@ function createWindow(): void {
       mainWindow.maximize()
     }
   })
-  ipcMain.on('window:close', () => mainWindow.close())
+
+  // 窗口关闭处理
+  ipcMain.on('window:close', () => {
+    // 触发窗口关闭，会被 close 事件拦截
+    mainWindow.close()
+  })
+
+  // 拦截窗口关闭事件
+  mainWindow.on('close', (event) => {
+    // 如果是真正退出，不拦截
+    if (isQuitting) {
+      return
+    }
+
+    // 根据关闭行为处理
+    if (closeBehavior === 'minimize') {
+      // 最小化到托盘
+      event.preventDefault()
+      mainWindow.hide()
+      createTray(mainWindow)
+    } else if (closeBehavior === 'quit') {
+      // 直接退出
+      isQuitting = true
+      closeDockWindow()
+    } else {
+      // 询问用户 - 通知渲染进程显示对话框
+      event.preventDefault()
+      mainWindow.webContents.send('app:showCloseDialog')
+    }
+  })
+
   ipcMain.handle('window:isMaximized', () => mainWindow.isMaximized())
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
@@ -226,19 +323,23 @@ function createWindow(): void {
     }
   })
 
-  // 开机自启动
-  ipcMain.handle('app:getAutoLaunch', () => {
-    const settings = app.getLoginItemSettings()
-    return settings.openAtLogin
+  // 开机自启动（使用 auto-launch 库）
+  ipcMain.handle('app:getAutoLaunch', async () => {
+    try {
+      return await appLauncher.isEnabled()
+    } catch (error) {
+      console.error('Failed to get auto launch status:', error)
+      return false
+    }
   })
 
   ipcMain.handle('app:setAutoLaunch', async (_, enabled: boolean) => {
     try {
-      app.setLoginItemSettings({
-        openAtLogin: enabled,
-        // Windows 上可选：以隐藏方式启动
-        openAsHidden: false
-      })
+      if (enabled) {
+        await appLauncher.enable()
+      } else {
+        await appLauncher.disable()
+      }
       notify.success(enabled ? '已开启开机自启动' : '已关闭开机自启动')
       return { success: true }
     } catch (error) {
@@ -246,6 +347,37 @@ function createWindow(): void {
       notify.error('设置开机自启动失败')
       return { success: false, error: '设置开机自启动失败' }
     }
+  })
+
+  // 关闭行为设置
+  ipcMain.handle('app:getCloseBehavior', () => closeBehavior)
+
+  ipcMain.handle('app:setCloseBehavior', async (_, behavior: CloseBehavior) => {
+    closeBehavior = behavior
+    return { success: true }
+  })
+
+  // 关闭对话框响应
+  ipcMain.on('app:closeDialogResult', (_, result: { action: 'minimize' | 'quit'; remember: boolean }) => {
+    if (result.remember) {
+      closeBehavior = result.action
+    }
+
+    if (result.action === 'minimize') {
+      mainWindow.hide()
+      createTray(mainWindow)
+    } else {
+      isQuitting = true
+      closeDockWindow()
+      mainWindow.close()
+    }
+  })
+
+  // 真正退出应用
+  ipcMain.on('app:quit', () => {
+    isQuitting = true
+    closeDockWindow()
+    app.quit()
   })
 
   mainWindow.on('maximize', () => {

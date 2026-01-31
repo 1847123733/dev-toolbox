@@ -30,6 +30,15 @@ const api = {
     setProxy: (proxyUrl: string) => ipcRenderer.invoke('app:setProxy', proxyUrl),
     getAutoLaunch: () => ipcRenderer.invoke('app:getAutoLaunch'),
     setAutoLaunch: (enabled: boolean) => ipcRenderer.invoke('app:setAutoLaunch', enabled),
+    getCloseBehavior: () => ipcRenderer.invoke('app:getCloseBehavior'),
+    setCloseBehavior: (behavior: 'ask' | 'minimize' | 'quit') =>
+      ipcRenderer.invoke('app:setCloseBehavior', behavior),
+    sendCloseDialogResult: (result: { action: 'minimize' | 'quit'; remember: boolean }) =>
+      ipcRenderer.send('app:closeDialogResult', result),
+    quit: () => ipcRenderer.send('app:quit'),
+    onShowCloseDialog: (callback: () => void) => {
+      ipcRenderer.on('app:showCloseDialog', () => callback())
+    },
     onDownloadProgress: (callback: (progress: number) => void) => {
       ipcRenderer.on('app:downloadProgress', (_, progress) => callback(progress))
     },

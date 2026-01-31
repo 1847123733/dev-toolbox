@@ -109,6 +109,11 @@ interface AppAPI {
   setProxy: (proxyUrl: string) => Promise<{ success: boolean; error?: string }>
   getAutoLaunch: () => Promise<boolean>
   setAutoLaunch: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  getCloseBehavior: () => Promise<'ask' | 'minimize' | 'quit'>
+  setCloseBehavior: (behavior: 'ask' | 'minimize' | 'quit') => Promise<{ success: boolean }>
+  sendCloseDialogResult: (result: { action: 'minimize' | 'quit'; remember: boolean }) => void
+  quit: () => void
+  onShowCloseDialog: (callback: () => void) => void
   onDownloadProgress: (callback: (progress: number) => void) => void
   onUpdateDownloaded: (callback: () => void) => void
 }

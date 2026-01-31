@@ -3,9 +3,13 @@ import { ref, onMounted, computed, defineAsyncComponent, type Component } from '
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import GlobalNotification from './components/GlobalNotification.vue'
+import CloseDialog from './components/CloseDialog.vue'
 
 // 当前选中的工具
 const activeTool = ref('home')
+
+// 显示关闭对话框
+const showCloseDialog = ref(false)
 
 // 工具列表
 const tools = [
@@ -44,6 +48,11 @@ onMounted(async () => {
       console.error('Failed to load proxy:', error)
     }
   }
+
+  // 监听显示关闭对话框事件
+  window.api.app.onShowCloseDialog(() => {
+    showCloseDialog.value = true
+  })
 })
 </script>
 
@@ -51,6 +60,9 @@ onMounted(async () => {
   <div class="app-container flex flex-col h-screen bg-[var(--color-surface)]">
     <!-- 全局通知 -->
     <GlobalNotification />
+
+    <!-- 关闭对话框 -->
+    <CloseDialog v-if="showCloseDialog" @close="showCloseDialog = false" />
 
     <!-- 标题栏 -->
     <TitleBar />
