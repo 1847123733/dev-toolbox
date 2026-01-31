@@ -1,6 +1,6 @@
 {
   "name": "dev-toolbox",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "开发者工具集合 - 包含代码运行器等实用工具",
   "main": "./out/main/index.js",
   "author": {
