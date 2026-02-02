@@ -57,7 +57,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app-container flex flex-col h-screen bg-[var(--color-surface)]">
+  <div class="app-container flex flex-col h-screen">
     <!-- 全局通知 -->
     <GlobalNotification />
 
@@ -68,7 +68,7 @@ onMounted(async () => {
     <TitleBar />
 
     <!-- 主体内容 -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="app-body flex flex-1 overflow-hidden">
       <!-- 左侧工具栏 -->
       <Sidebar
         :tools="tools"
@@ -78,7 +78,7 @@ onMounted(async () => {
       />
 
       <!-- 主内容区 -->
-      <main class="flex-1 overflow-hidden">
+      <main class="app-main flex-1 overflow-hidden">
         <KeepAlive>
           <component :is="activeComponent" :key="activeTool" @open-tool="handleToolSelect" />
         </KeepAlive>
@@ -89,8 +89,42 @@ onMounted(async () => {
 
 <style scoped>
 .app-container {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+  border-radius: 14px;
   overflow: hidden;
+  background:
+    radial-gradient(110% 140% at 10% -10%, rgba(99, 102, 241, 0.22), transparent 45%),
+    radial-gradient(120% 120% at 90% 0%, rgba(6, 182, 212, 0.18), transparent 42%),
+    radial-gradient(120% 140% at 50% 120%, rgba(139, 92, 246, 0.18), transparent 48%),
+    linear-gradient(180deg, rgba(16, 18, 28, 0.98), rgba(20, 23, 35, 0.96));
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.35),
+    0 2px 0 rgba(255, 255, 255, 0.02) inset;
+}
+
+.app-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), transparent 30%),
+    linear-gradient(330deg, rgba(255, 255, 255, 0.03), transparent 45%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-container > * {
+  position: relative;
+  z-index: 1;
+}
+
+.app-body {
+  background: linear-gradient(90deg, rgba(12, 14, 22, 0.7), rgba(18, 20, 30, 0.92));
+}
+
+.app-main {
+  background: linear-gradient(135deg, rgba(26, 29, 42, 0.85), rgba(18, 20, 30, 0.92));
+  box-shadow: -1px 0 0 rgba(255, 255, 255, 0.04);
 }
 </style>
