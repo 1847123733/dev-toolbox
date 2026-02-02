@@ -51,6 +51,36 @@ const customApp = ref({
 // 图标选项
 const iconOptions = ['finder', 'terminal', 'browser', 'settings', 'folder']
 
+// 图标 SVG 定义
+const iconSvgs: Record<string, string> = {
+  finder: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v12h16V6H4zm2 2h3v2H6V8zm0 4h3v2H6v-2z"/>
+  </svg>`,
+  terminal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M4 17l6-5-6-5M12 19h8"/>
+  </svg>`,
+  browser: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+  </svg>`,
+  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+  </svg>`,
+  folder: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z"/>
+  </svg>`
+}
+
+// 图标对应的背景色
+const iconColors: Record<string, string> = {
+  finder: 'linear-gradient(135deg, #1E90FF, #4169E1)',
+  terminal: 'linear-gradient(135deg, #2d2d2d, #1a1a1a)',
+  browser: 'linear-gradient(135deg, #4285F4, #34A853)',
+  settings: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+  folder: 'linear-gradient(135deg, #60A5FA, #3B82F6)'
+}
+
 // 拖拽相关
 const dragIndex = ref<number | null>(null)
 
@@ -315,8 +345,11 @@ onMounted(() => {
             </template>
             <template v-else>
               <!-- 图标 -->
-              <div class="w-8 h-8 rounded-lg bg-[var(--color-primary)]/20 flex items-center justify-center">
-                <span class="text-sm">{{ app.icon.charAt(0).toUpperCase() }}</span>
+              <div 
+                class="w-8 h-8 rounded-lg flex items-center justify-center text-white"
+                :style="{ background: iconColors[app.icon] || iconColors.folder }"
+              >
+                <div class="w-5 h-5" v-html="iconSvgs[app.icon] || iconSvgs.folder"></div>
               </div>
               <!-- 名称 -->
               <span class="flex-1 text-[var(--color-text)]">{{ app.name }}</span>
@@ -471,9 +504,23 @@ onMounted(() => {
             <label class="label">
               <span class="label-text text-[var(--color-text)]">图标</span>
             </label>
-            <select v-model="customApp.icon" class="select select-bordered w-full bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text)]">
-              <option v-for="icon in iconOptions" :key="icon" :value="icon">{{ icon }}</option>
-            </select>
+            <div class="flex gap-2 flex-wrap">
+              <button
+                v-for="icon in iconOptions"
+                :key="icon"
+                @click="customApp.icon = icon"
+                :class="[
+                  'w-12 h-12 rounded-lg flex items-center justify-center transition-all border-2 text-white',
+                  customApp.icon === icon 
+                    ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/50' 
+                    : 'border-transparent hover:border-[var(--color-border)]'
+                ]"
+                :style="{ background: iconColors[icon] }"
+                :title="icon"
+              >
+                <div class="w-7 h-7" v-html="iconSvgs[icon]"></div>
+              </button>
+            </div>
           </div>
           
           <div class="form-control">
