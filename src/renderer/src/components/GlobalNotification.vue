@@ -1,7 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 
-// 通知类型
 type NotificationType = 'info' | 'success' | 'warning' | 'error'
 
 interface Notification {
@@ -14,18 +13,15 @@ interface Notification {
 const notifications = ref<Notification[]>([])
 let notificationId = 0
 
-// 添加通知
 function addNotification(message: string, type: NotificationType) {
   const id = ++notificationId
   notifications.value.push({ id, message, type, copied: false })
 
-  // 5秒后自动移除
   setTimeout(() => {
     removeNotification(id)
   }, 5000)
 }
 
-// 移除通知
 function removeNotification(id: number) {
   const index = notifications.value.findIndex((n) => n.id === id)
   if (index !== -1) {
@@ -33,13 +29,11 @@ function removeNotification(id: number) {
   }
 }
 
-// 复制通知内容
 async function copyNotification(notification: Notification, event: Event) {
   event.stopPropagation()
   try {
     await navigator.clipboard.writeText(notification.message)
     notification.copied = true
-    // 2秒后重置复制状态
     setTimeout(() => {
       notification.copied = false
     }, 2000)
@@ -48,7 +42,6 @@ async function copyNotification(notification: Notification, event: Event) {
   }
 }
 
-// 获取通知图标
 function getIcon(type: NotificationType) {
   switch (type) {
     case 'success':
@@ -62,7 +55,6 @@ function getIcon(type: NotificationType) {
   }
 }
 
-// 获取通知样式类
 function getTypeClass(type: NotificationType) {
   switch (type) {
     case 'success':
@@ -77,7 +69,6 @@ function getTypeClass(type: NotificationType) {
 }
 
 onMounted(() => {
-  // 监听主进程通知
   window.api.notification.onNotify((message, type) => {
     addNotification(message, type)
   })
@@ -87,7 +78,6 @@ onUnmounted(() => {
   window.api.notification.removeListener()
 })
 
-// 暴露方法供外部使用
 defineExpose({
   addNotification
 })
@@ -109,7 +99,6 @@ defineExpose({
           {{ getIcon(notification.type) }}
         </span>
         <span class="text-white text-sm flex-1">{{ notification.message }}</span>
-        <!-- 复制按钮 -->
         <button
           class="w-5 h-5 flex items-center justify-center text-white/70 hover:text-white transition-colors"
           :title="notification.copied ? '已复制' : '复制'"
@@ -129,8 +118,11 @@ defineExpose({
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
         </button>
-        <!-- 关闭按钮 -->
-        <button class="w-5 h-5 flex items-center justify-center text-white/70 hover:text-white">
+        <button
+          class="w-5 h-5 flex items-center justify-center text-white/70 hover:text-white"
+          @click.stop="removeNotification(notification.id)"
+          aria-label="关闭"
+        >
           ✕
         </button>
       </div>

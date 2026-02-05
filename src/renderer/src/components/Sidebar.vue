@@ -83,7 +83,8 @@ const getIcon = (iconName: string) => {
   const icons: Record<string, string> = {
     code: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />`,
     globe: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />`,
-    dock: `<rect x="2" y="16" width="20" height="5" rx="1" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" fill="none" /><circle cx="6" cy="18.5" r="1" fill="currentColor" /><circle cx="12" cy="18.5" r="1" fill="currentColor" /><circle cx="18" cy="18.5" r="1" fill="currentColor" />`
+    dock: `<rect x="2" y="16" width="20" height="5" rx="1" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" fill="none" /><circle cx="6" cy="18.5" r="1" fill="currentColor" /><circle cx="12" cy="18.5" r="1" fill="currentColor" /><circle cx="18" cy="18.5" r="1" fill="currentColor" />`,
+    cloud: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 014-4h1.5a4.5 4.5 0 018.9-.9A3.5 3.5 0 0118 18H7a4 4 0 01-4-3z" />`
   }
   return icons[iconName] || icons.code
 }

@@ -101,6 +101,45 @@ const api = {
     close: () => ipcRenderer.invoke('dock:close'),
     isOpen: () => ipcRenderer.invoke('dock:isOpen'),
     action: (action: string) => ipcRenderer.invoke('dock:action', action)
+  },
+
+  // 阿里云 OSS
+  oss: {
+    selectFiles: () => ipcRenderer.invoke('oss:selectFiles'),
+    selectFolder: () => ipcRenderer.invoke('oss:selectFolder'),
+    cancelUpload: (payload: { taskId: string }) => ipcRenderer.invoke('oss:cancelUpload', payload),
+    upload: (payload: {
+      taskId: string
+      config: {
+        accessKeyId: string
+        accessKeySecret: string
+        endpoint: string
+        bucket: string
+        targetPath?: string
+      }
+      files: { path: string; name?: string; relativePath?: string; size?: number }[]
+    }) => ipcRenderer.invoke('oss:upload', payload),
+    onUploadProgress: (
+      callback: (progress: {
+        taskId: string
+        fileIndex: number
+        fileName: string
+        relativePath: string
+        fileLoaded: number
+        fileTotal: number
+        filePercent: number
+        overallLoaded: number
+        overallTotal: number
+        overallPercent: number
+        status: 'uploading' | 'done' | 'error'
+        message?: string
+      }) => void
+    ) => {
+      ipcRenderer.on('oss:uploadProgress', (_, progress) => callback(progress))
+    },
+    removeUploadListener: () => {
+      ipcRenderer.removeAllListeners('oss:uploadProgress')
+    }
   }
 }
 

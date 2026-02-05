@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue'
 
 const emit = defineEmits<{
@@ -26,22 +26,27 @@ const handleCancel = () => {
     <div
       class="bg-[var(--color-surface)] rounded-2xl shadow-2xl border border-[var(--color-border)] w-[380px] overflow-hidden"
     >
-      <!-- 标题栏 -->
-      <div class="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+      <div
+        class="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]"
+      >
         <h3 class="text-base font-semibold text-[var(--color-text)]">关闭提示</h3>
         <button
           @click="handleCancel"
           class="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--color-text-muted)] hover:bg-[var(--color-surface-light)] hover:text-[var(--color-text)] transition-colors"
+          aria-label="关闭"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       </div>
 
-      <!-- 内容区 -->
       <div class="px-5 py-5">
-        <!-- 选项列表 -->
         <div class="space-y-3">
           <label
             class="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
@@ -78,7 +83,6 @@ const handleCancel = () => {
           </label>
         </div>
 
-        <!-- 不再提醒 -->
         <label class="flex items-center gap-2 mt-5 cursor-pointer">
           <input
             type="checkbox"
@@ -89,8 +93,9 @@ const handleCancel = () => {
         </label>
       </div>
 
-      <!-- 底部按钮 -->
-      <div class="flex justify-end gap-3 px-5 py-4 border-t border-[var(--color-border)] bg-[var(--color-surface-light)]">
+      <div
+        class="flex justify-end gap-3 px-5 py-4 border-t border-[var(--color-border)] bg-[var(--color-surface-light)]"
+      >
         <button
           @click="handleConfirm"
           class="px-5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg transition-colors"

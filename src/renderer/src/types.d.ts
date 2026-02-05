@@ -76,6 +76,53 @@ interface DockAPI {
   action: (action: string) => Promise<{ success: boolean }>
 }
 
+interface OssConfig {
+  accessKeyId: string
+  accessKeySecret: string
+  endpoint: string
+  bucket: string
+  targetPath?: string
+}
+
+interface OssUploadFile {
+  path: string
+  name?: string
+  relativePath?: string
+  size?: number
+}
+
+interface OssUploadProgress {
+  taskId: string
+  fileIndex: number
+  fileName: string
+  relativePath: string
+  fileLoaded: number
+  fileTotal: number
+  filePercent: number
+  overallLoaded: number
+  overallTotal: number
+  overallPercent: number
+  status: 'uploading' | 'done' | 'error'
+  message?: string
+}
+
+interface OssUploadResult {
+  success: boolean
+  uploaded?: number
+  failed?: number
+  errors?: { file: string; message: string }[]
+  error?: string
+}
+
+interface OssAPI {
+  selectFiles: () => Promise<OssUploadFile[]>
+  selectFolder: () => Promise<OssUploadFile[]>
+  cancelUpload: (payload: { taskId: string }) => Promise<{ success: boolean; error?: string }>
+  upload: (payload: { taskId: string; config: OssConfig; files: OssUploadFile[] }) => Promise<OssUploadResult>
+  onUploadProgress: (callback: (progress: OssUploadProgress) => void) => void
+  removeUploadListener: () => void
+}
+
 // 通知类型
 type NotificationType = 'info' | 'success' | 'warning' | 'error'
 
@@ -126,6 +173,7 @@ interface API {
   notification: NotificationAPI
   domainLookup: DomainLookupAPI
   app: AppAPI
+  oss: OssAPI
 }
 
 declare global {

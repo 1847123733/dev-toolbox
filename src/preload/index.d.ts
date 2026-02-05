@@ -168,6 +168,55 @@ interface DockAPI {
   action: (action: string) => Promise<{ success: boolean }>
 }
 
+// ============ OSS 上传相关类型 ============
+
+interface OssConfig {
+  accessKeyId: string
+  accessKeySecret: string
+  endpoint: string
+  bucket: string
+  targetPath?: string
+}
+
+interface OssUploadFile {
+  path: string
+  name?: string
+  relativePath?: string
+  size?: number
+}
+
+interface OssUploadProgress {
+  taskId: string
+  fileIndex: number
+  fileName: string
+  relativePath: string
+  fileLoaded: number
+  fileTotal: number
+  filePercent: number
+  overallLoaded: number
+  overallTotal: number
+  overallPercent: number
+  status: 'uploading' | 'done' | 'error'
+  message?: string
+}
+
+interface OssUploadResult {
+  success: boolean
+  uploaded?: number
+  failed?: number
+  errors?: { file: string; message: string }[]
+  error?: string
+}
+
+interface OssAPI {
+  selectFiles: () => Promise<OssUploadFile[]>
+  selectFolder: () => Promise<OssUploadFile[]>
+  cancelUpload: (payload: { taskId: string }) => Promise<{ success: boolean; error?: string }>
+  upload: (payload: { taskId: string; config: OssConfig; files: OssUploadFile[] }) => Promise<OssUploadResult>
+  onUploadProgress: (callback: (progress: OssUploadProgress) => void) => void
+  removeUploadListener: () => void
+}
+
 interface API {
   window: WindowAPI
   app: AppAPI
@@ -176,6 +225,7 @@ interface API {
   npm: NpmAPI
   domainLookup: DomainLookupAPI
   dock: DockAPI
+  oss: OssAPI
 }
 
 interface CodeRunResult {

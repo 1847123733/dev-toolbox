@@ -31,6 +31,7 @@
     "@tailwindcss/vite": "^4.1.8",
     "auto-launch": "^5.0.6",
     "axios": "^1.7.9",
+    "ali-oss": "^6.0.0",
     "daisyui": "^5.0.43",
     "dayjs": "^1.11.13",
     "electron-updater": "^6.6.2",

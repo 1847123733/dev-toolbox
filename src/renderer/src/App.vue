@@ -15,7 +15,8 @@ const showCloseDialog = ref(false)
 const tools = [
   { id: 'runjs', name: 'RunJS', icon: 'code' },
   { id: 'domain', name: '域名查询', icon: 'globe' },
-  { id: 'dock', name: 'macOS Dock', icon: 'dock' }
+  { id: 'dock', name: 'macOS Dock', icon: 'dock' },
+  { id: 'oss', name: 'OSS管理', icon: 'cloud' }
   // 添加新工具：{ id: 'json', name: 'JSON工具', icon: 'json' }
 ]
 
@@ -25,6 +26,7 @@ const toolComponents: Record<string, Component> = {
   runjs: defineAsyncComponent(() => import('./views/runjs/RunJS.vue')),
   domain: defineAsyncComponent(() => import('./views/domainlookup/DomainLookup.vue')),
   dock: defineAsyncComponent(() => import('./views/dock/DockSettings.vue')),
+  oss: defineAsyncComponent(() => import('./views/oss/OssManager.vue')),
   settings: defineAsyncComponent(() => import('./views/settings/Settings.vue'))
   // 添加新工具：json: defineAsyncComponent(() => import('./views/json/JsonTool.vue'))
 }
@@ -112,11 +114,6 @@ onMounted(async () => {
     linear-gradient(330deg, rgba(255, 255, 255, 0.03), transparent 45%);
   pointer-events: none;
   z-index: 0;
-}
-
-.app-container > * {
-  position: relative;
-  z-index: 1;
 }
 
 .app-body {
