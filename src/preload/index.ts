@@ -103,6 +103,17 @@ const api = {
     action: (action: string) => ipcRenderer.invoke('dock:action', action)
   },
 
+  // HTTP 客户端
+  httpClient: {
+    send: (payload: {
+      method: string
+      url: string
+      headers: Record<string, string>
+      body?: string
+      timeout?: number
+    }) => ipcRenderer.invoke('http:send', payload)
+  },
+
   // 阿里云 OSS
   oss: {
     selectFiles: () => ipcRenderer.invoke('oss:selectFiles'),

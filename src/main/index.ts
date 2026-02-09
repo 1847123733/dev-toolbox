@@ -7,6 +7,7 @@ import { setupNpmManager } from './services/npmManager'
 import { setupDomainLookup } from './services/domainLookup'
 import { setupDockService, closeDockWindow } from './services/dockService'
 import { setupOssManager } from './services/ossManager'
+import { setupHttpClient } from './services/httpClient'
 import { notify } from './services/notification'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const AutoLaunch = require('auto-launch')
@@ -421,6 +422,7 @@ if (!gotTheLock) {
     setupNpmManager()
     setupDomainLookup()
     setupOssManager()
+    setupHttpClient()
 
     createWindow()
 

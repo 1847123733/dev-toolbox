@@ -217,6 +217,30 @@ interface OssAPI {
   removeUploadListener: () => void
 }
 
+// ============ HTTP 客户端相关类型 ============
+
+interface HttpClientRequestPayload {
+  method: string
+  url: string
+  headers: Record<string, string>
+  body?: string
+  timeout?: number
+}
+
+interface HttpClientResponse {
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  body: string
+  size: number
+  time: number
+  error?: string
+}
+
+interface HttpClientAPI {
+  send: (payload: HttpClientRequestPayload) => Promise<HttpClientResponse>
+}
+
 interface API {
   window: WindowAPI
   app: AppAPI
@@ -225,6 +249,7 @@ interface API {
   npm: NpmAPI
   domainLookup: DomainLookupAPI
   dock: DockAPI
+  httpClient: HttpClientAPI
   oss: OssAPI
 }
 

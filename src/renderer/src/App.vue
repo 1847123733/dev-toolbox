@@ -16,7 +16,8 @@ const tools = [
   { id: 'runjs', name: 'RunJS', icon: 'code' },
   { id: 'domain', name: '域名查询', icon: 'globe' },
   { id: 'dock', name: 'macOS Dock', icon: 'dock' },
-  { id: 'oss', name: 'OSS管理', icon: 'cloud' }
+  { id: 'oss', name: 'OSS管理', icon: 'cloud' },
+    { id: 'httpclient', name: 'HTTP请求', icon: 'send' }
   // 添加新工具：{ id: 'json', name: 'JSON工具', icon: 'json' }
 ]
 
@@ -27,6 +28,7 @@ const toolComponents: Record<string, Component> = {
   domain: defineAsyncComponent(() => import('./views/domainlookup/DomainLookup.vue')),
   dock: defineAsyncComponent(() => import('./views/dock/DockSettings.vue')),
   oss: defineAsyncComponent(() => import('./views/oss/OssManager.vue')),
+    httpclient: defineAsyncComponent(() => import('./views/httpclient/HttpClient.vue')),
   settings: defineAsyncComponent(() => import('./views/settings/Settings.vue'))
   // 添加新工具：json: defineAsyncComponent(() => import('./views/json/JsonTool.vue'))
 }
