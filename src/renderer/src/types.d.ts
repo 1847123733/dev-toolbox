@@ -1,4 +1,4 @@
-export { }
+export {}
 
 interface NpmPackage {
   name: string
@@ -118,7 +118,11 @@ interface OssAPI {
   selectFiles: () => Promise<OssUploadFile[]>
   selectFolder: () => Promise<OssUploadFile[]>
   cancelUpload: (payload: { taskId: string }) => Promise<{ success: boolean; error?: string }>
-  upload: (payload: { taskId: string; config: OssConfig; files: OssUploadFile[] }) => Promise<OssUploadResult>
+  upload: (payload: {
+    taskId: string
+    config: OssConfig
+    files: OssUploadFile[]
+  }) => Promise<OssUploadResult>
   onUploadProgress: (callback: (progress: OssUploadProgress) => void) => void
   removeUploadListener: () => void
 }
@@ -174,6 +178,7 @@ interface API {
   domainLookup: DomainLookupAPI
   app: AppAPI
   oss: OssAPI
+  httpClient: any
 }
 
 declare global {
