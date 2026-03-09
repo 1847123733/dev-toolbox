@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
 type UploadStatus = 'pending' | 'uploading' | 'success' | 'error'
@@ -346,241 +346,142 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="oss-manager h-full flex flex-col p-6 overflow-auto">
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-[var(--color-text)] flex items-center gap-3">
-        <svg
-          class="w-7 h-7 text-[var(--color-primary)]"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M3 15a4 4 0 014-4h1.5a4.5 4.5 0 018.9-.9A3.5 3.5 0 0118 18H7a4 4 0 01-4-3z"
-          />
-        </svg>
-        阿里�?OSS 管理
-      </h1>
-      <p class="text-[var(--color-text-muted)] mt-2">
-        配置 AccessKey �?Endpoint，拖拽文件或文件夹到上传区，默认对象权限�?public-read�?
-      </p>
+  <div class="oss-page">
+    <div class="page-header">
+      <h1 class="page-title">阿里云 OSS 管理</h1>
+      <p class="page-desc">配置 AccessKey 与 Endpoint，拖拽文件或文件夹上传，默认对象权限为 public-read</p>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-      <div class="xl:col-span-1 space-y-6">
-        <div class="card-block">
-          <div class="flex items-center gap-2 mb-4">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span class="text-sm font-medium text-[var(--color-text)]">OSS 连接配置</span>
-          </div>
-          <div class="space-y-4">
-            <div>
-              <label class="text-xs text-[var(--color-text-muted)]">Access Key ID</label>
-              <input
-                v-model="accessKeyId"
-                :disabled="isUploading"
-                type="text"
-                placeholder="LTAIxxxxxxxxxxxx"
-                class="input-field"
-              />
+    <div class="page-body">
+      <div class="oss-layout">
+        <!-- Left: Config -->
+        <div class="config-col">
+          <div class="config-card">
+            <div class="card-label">
+              <span class="label-dot green"></span>
+              <span>OSS 连接配置</span>
             </div>
-            <div>
-              <label class="text-xs text-[var(--color-text-muted)]">Access Key Secret</label>
-              <input
-                v-model="accessKeySecret"
-                :disabled="isUploading"
-                type="password"
-                placeholder="********************************"
-                class="input-field"
-              />
-            </div>
-            <div>
-              <label class="text-xs text-[var(--color-text-muted)]">Endpoint</label>
-              <input
-                v-model="endpoint"
-                :disabled="isUploading"
-                type="text"
-                placeholder="https://oss-cn-beijing.aliyuncs.com"
-                class="input-field"
-              />
-            </div>
-            <div>
-              <label class="text-xs text-[var(--color-text-muted)]">Bucket Name</label>
-              <input
-                v-model="bucket"
-                :disabled="isUploading"
-                type="text"
-                placeholder="your-bucket-name"
-                class="input-field"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="card-block">
-          <div class="flex items-center gap-2 mb-4">
-            <span class="w-2 h-2 rounded-full bg-blue-400"></span>
-            <span class="text-sm font-medium text-[var(--color-text)]">上传路径与</span>
-          </div>
-          <div class="space-y-4">
-            <div>
-              <label class="text-xs text-[var(--color-text-muted)]">目标路径（可选）</label>
-              <input
-                v-model="targetPath"
-                :disabled="isUploading"
-                type="text"
-                placeholder="例如: uploads/2026"
-                class="input-field"
-              />
-              <p class="text-[11px] text-[var(--color-text-muted)] mt-1">
-                当前目标路径: <span class="text-indigo-400">{{ displayTargetPath }}</span>
-              </p>
-            </div>
-            <div
-              class="flex items-center justify-between p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]"
-            >
-              <div>
-                <p class="text-sm text-[var(--color-text)]">对象 ACL</p>
-                <p class="text-xs text-[var(--color-text-muted)]">上传后默�?public-read</p>
+            <div class="config-fields">
+              <div class="field">
+                <label class="field-label">Access Key ID</label>
+                <input v-model="accessKeyId" :disabled="isUploading" type="text" placeholder="LTAIxxxxxxxxxxxx" class="field-input" />
               </div>
-              <span class="px-2 py-1 text-xs rounded-full bg-emerald-500/20 text-emerald-300">
-                public-read
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="xl:col-span-2 space-y-6">
-        <div
-          class="drop-zone"
-          :class="{ dragging: isDragging, disabled: isUploading }"
-          @dragenter.prevent="isDragging = true"
-          @dragover.prevent="isDragging = true"
-          @dragleave.prevent="isDragging = false"
-          @drop.prevent="handleDrop"
-        >
-          <div class="flex flex-col items-center gap-3">
-            <div class="w-14 h-14 rounded-2xl bg-indigo-500/20 flex items-center justify-center">
-              <svg
-                class="w-7 h-7 text-indigo-300"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M7 16l5-5 5 5M12 11v9"
-                />
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M20 16.5a4.5 4.5 0 00-2.45-3.99A6 6 0 107 16.5"
-                />
-              </svg>
-            </div>
-            <div class="text-center">
-              <p class="text-sm text-[var(--color-text)]">拖拽文件或文件夹到此区域</p>
-              <p class="text-xs text-[var(--color-text-muted)] mt-1">支持单文件或目录结构上传</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <button class="btn-action" :disabled="isUploading" @click="triggerFileSelect">
-                选择文件
-              </button>
-              <button class="btn-action" :disabled="isUploading" @click="triggerFolderSelect">
-                选择文件夹
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card-block">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-purple-400"></span>
-              <span class="text-sm font-medium text-[var(--color-text)]">待上传</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <button
-                class="btn-muted"
-                :disabled="isUploading || files.length === 0"
-                @click="clearFiles"
-              >
-                清空列表
-              </button>
-              <button class="btn-muted" :disabled="!isUploading" @click="cancelUpload">
-                终止上传
-              </button>
-              <button class="btn-primary" :disabled="!canUpload" @click="startUpload">
-                开始上传
-              </button>
+              <div class="field">
+                <label class="field-label">Access Key Secret</label>
+                <input v-model="accessKeySecret" :disabled="isUploading" type="password" placeholder="********************************" class="field-input" />
+              </div>
+              <div class="field">
+                <label class="field-label">Endpoint</label>
+                <input v-model="endpoint" :disabled="isUploading" type="text" placeholder="https://oss-cn-beijing.aliyuncs.com" class="field-input" />
+              </div>
+              <div class="field">
+                <label class="field-label">Bucket Name</label>
+                <input v-model="bucket" :disabled="isUploading" type="text" placeholder="your-bucket-name" class="field-input" />
+              </div>
             </div>
           </div>
 
-          <div v-if="files.length === 0" class="empty-state">暂无文件，请拖拽或选择文件</div>
-          <div v-else class="space-y-3">
-            <div
-              v-for="file in files"
-              :key="file.id"
-              class="file-item"
-              :class="{
-                uploading: file.status === 'uploading',
-                success: file.status === 'success',
-                error: file.status === 'error'
-              }"
-            >
-              <div class="flex items-start justify-between gap-4">
-                <div class="min-w-0">
-                  <p class="text-sm text-[var(--color-text)] truncate">{{ file.relativePath }}</p>
-                  <p class="text-xs text-[var(--color-text-muted)] truncate">
-                    目标路径: {{ file.uploadKey || file.relativePath }}
-                  </p>
+          <div class="config-card">
+            <div class="card-label">
+              <span class="label-dot blue"></span>
+              <span>上传路径</span>
+            </div>
+            <div class="config-fields">
+              <div class="field">
+                <label class="field-label">目标路径（可选）</label>
+                <input v-model="targetPath" :disabled="isUploading" type="text" placeholder="例如: uploads/2026" class="field-input" />
+                <p class="field-hint">当前目标路径: <span class="hint-highlight">{{ displayTargetPath }}</span></p>
+              </div>
+              <div class="acl-row">
+                <div>
+                  <p class="acl-title">对象 ACL</p>
+                  <p class="acl-desc">上传后默认 public-read</p>
                 </div>
-                <div class="text-right">
-                  <p class="text-xs text-[var(--color-text-muted)]">{{ formatBytes(file.size) }}</p>
-                  <p
-                    class="text-xs"
-                    :class="file.status === 'error' ? 'text-red-400' : 'text-indigo-300'"
-                  >
-                    {{
-                      file.status === 'success'
-                        ? '完成'
-                        : file.status === 'error'
-                          ? '失败'
-                          : `${file.progress}%`
-                    }}
-                  </p>
-                </div>
+                <span class="acl-badge">public-read</span>
               </div>
-              <div class="progress-track">
-                <div class="progress-bar" :style="{ width: `${file.progress}%` }"></div>
-              </div>
-              <p v-if="file.status === 'error' && file.message" class="text-xs text-red-400 mt-1">
-                {{ file.message }}
-              </p>
             </div>
           </div>
         </div>
 
-        <div class="card-block">
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-sm font-medium text-[var(--color-text)]">上传进度</span>
-            <span class="text-xs text-[var(--color-text-muted)]">{{ overallPercent }}%</span>
-          </div>
-          <div class="progress-track large">
-            <div class="progress-bar" :style="{ width: `${overallPercent}%` }"></div>
-          </div>
+        <!-- Right: Upload -->
+        <div class="upload-col">
           <div
-            class="flex items-center justify-between mt-2 text-xs text-[var(--color-text-muted)]"
+            class="drop-zone"
+            :class="{ dragging: isDragging, disabled: isUploading }"
+            @dragenter.prevent="isDragging = true"
+            @dragover.prevent="isDragging = true"
+            @dragleave.prevent="isDragging = false"
+            @drop.prevent="handleDrop"
           >
-            <span>当前文件: {{ currentFile || '-' }}</span>
-            <span>{{ formatBytes(overallLoaded) }} / {{ formatBytes(overallTotal) }}</span>
+            <div class="drop-content">
+              <div class="drop-icon">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16l5-5 5 5M12 11v9" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 16.5a4.5 4.5 0 00-2.45-3.99A6 6 0 107 16.5" />
+                </svg>
+              </div>
+              <p class="drop-text">拖拽文件或文件夹到此区域</p>
+              <p class="drop-hint">支持单文件或目录结构上传</p>
+              <div class="drop-actions">
+                <button class="action-btn" :disabled="isUploading" @click="triggerFileSelect">选择文件</button>
+                <button class="action-btn" :disabled="isUploading" @click="triggerFolderSelect">选择文件夹</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <div class="card-header-row">
+              <div class="card-label">
+                <span class="label-dot purple"></span>
+                <span>待上传</span>
+              </div>
+              <div class="header-actions">
+                <button class="ghost-btn" :disabled="isUploading || files.length === 0" @click="clearFiles">清空列表</button>
+                <button class="ghost-btn" :disabled="!isUploading" @click="cancelUpload">终止上传</button>
+                <button class="primary-btn" :disabled="!canUpload" @click="startUpload">开始上传</button>
+              </div>
+            </div>
+
+            <div v-if="files.length === 0" class="empty-files">暂无文件，请拖拽或选择文件</div>
+            <div v-else class="file-list">
+              <div
+                v-for="file in files"
+                :key="file.id"
+                class="file-item"
+                :class="file.status"
+              >
+                <div class="file-info">
+                  <div class="file-left">
+                    <p class="file-name">{{ file.relativePath }}</p>
+                    <p class="file-path">目标路径: {{ file.uploadKey || file.relativePath }}</p>
+                  </div>
+                  <div class="file-right">
+                    <p class="file-size">{{ formatBytes(file.size) }}</p>
+                    <p class="file-status" :class="file.status">
+                      {{ file.status === 'success' ? '完成' : file.status === 'error' ? '失败' : `${file.progress}%` }}
+                    </p>
+                  </div>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-bar" :style="{ width: `${file.progress}%` }"></div>
+                </div>
+                <p v-if="file.status === 'error' && file.message" class="file-error">{{ file.message }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <div class="progress-header">
+              <span class="progress-label">上传进度</span>
+              <span class="progress-percent">{{ overallPercent }}%</span>
+            </div>
+            <div class="progress-track large">
+              <div class="progress-bar" :style="{ width: `${overallPercent}%` }"></div>
+            </div>
+            <div class="progress-footer">
+              <span>当前文件: {{ currentFile || '-' }}</span>
+              <span>{{ formatBytes(overallLoaded) }} / {{ formatBytes(overallTotal) }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -589,161 +490,423 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.oss-manager {
-  background: linear-gradient(180deg, rgba(30, 30, 46, 0.95), rgba(20, 22, 34, 0.98));
+.oss-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
 }
 
-.card-block {
-  padding: 1.25rem;
-  border-radius: 1rem;
+.page-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+
+.page-desc {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.page-body {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 24px;
+}
+
+.oss-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 960px) {
+  .oss-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.config-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.upload-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.config-card {
+  padding: 18px;
+  border-radius: var(--radius-lg);
   background: var(--color-surface-light);
   border: 1px solid var(--color-border);
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.2);
 }
 
-.input-field {
+.card-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 14px;
+}
+
+.label-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.label-dot.green { background: #34d399; }
+.label-dot.blue { background: #60a5fa; }
+.label-dot.purple { background: #a78bfa; }
+
+.config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.field-input {
   width: 100%;
-  margin-top: 0.35rem;
-  padding: 0.6rem 0.9rem;
-  border-radius: 0.75rem;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 0.85rem;
+  font-size: 13px;
   outline: none;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.input-field:focus {
-  border-color: rgba(99, 102, 241, 0.6);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+.field-input:focus {
+  border-color: rgba(129, 140, 248, 0.5);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.1);
 }
 
-.input-field:disabled {
-  opacity: 0.6;
+.field-input:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
+.field-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.hint-highlight {
+  color: var(--color-primary);
+}
+
+.acl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.acl-title {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.acl-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.acl-badge {
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+}
+
+/* Drop Zone */
 .drop-zone {
-  border: 2px dashed rgba(99, 102, 241, 0.4);
-  background: rgba(24, 26, 40, 0.6);
-  padding: 2.5rem;
-  border-radius: 1.25rem;
-  transition: all 0.2s ease;
+  border: 2px dashed rgba(129, 140, 248, 0.25);
+  background: rgba(23, 25, 35, 0.5);
+  padding: 32px;
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
 }
 
 .drop-zone.dragging {
-  border-color: rgba(99, 102, 241, 0.9);
-  background: rgba(99, 102, 241, 0.15);
-  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  background: rgba(129, 140, 248, 0.08);
 }
 
 .drop-zone.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-action {
-  padding: 0.45rem 1rem;
-  border-radius: 0.75rem;
-  font-size: 0.8rem;
-  background: rgba(99, 102, 241, 0.15);
-  color: var(--color-text);
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  transition: all 0.2s ease;
-}
-
-.btn-action:hover:not(:disabled) {
-  background: rgba(99, 102, 241, 0.3);
-}
-
-.btn-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.btn-muted {
-  padding: 0.4rem 0.9rem;
-  border-radius: 0.7rem;
-  font-size: 0.75rem;
+.drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.drop-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: rgba(129, 140, 248, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drop-icon svg {
+  width: 24px;
+  height: 24px;
+  color: var(--color-primary);
+  opacity: 0.7;
+}
+
+.drop-text {
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.drop-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.drop-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.action-btn {
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  background: rgba(129, 140, 248, 0.1);
+  color: var(--color-text);
+  border: 1px solid rgba(129, 140, 248, 0.25);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.action-btn:hover:not(:disabled) {
+  background: rgba(129, 140, 248, 0.2);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Card Header Row */
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.card-header-row .card-label {
+  margin-bottom: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ghost-btn {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   color: var(--color-text-muted);
   border: 1px solid var(--color-border);
   background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.btn-muted:disabled {
-  opacity: 0.5;
+.ghost-btn:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-border-hover);
+}
+
+.ghost-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.btn-primary {
-  padding: 0.45rem 1.1rem;
-  border-radius: 0.7rem;
-  font-size: 0.8rem;
+.primary-btn {
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   font-weight: 600;
   color: white;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--color-primary);
   border: none;
-  transition: transform 0.2s ease;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.btn-primary:disabled {
-  opacity: 0.5;
+.primary-btn:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.primary-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.empty-state {
-  padding: 1.2rem;
-  border-radius: 0.75rem;
-  background: rgba(30, 30, 46, 0.6);
+/* File List */
+.empty-files {
+  padding: 20px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 17, 23, 0.5);
   border: 1px dashed var(--color-border);
   text-align: center;
   color: var(--color-text-muted);
-  font-size: 0.85rem;
+  font-size: 13px;
+}
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .file-item {
-  padding: 0.85rem;
-  border-radius: 0.75rem;
+  padding: 12px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
-  background: rgba(26, 28, 42, 0.75);
+  background: rgba(15, 17, 23, 0.5);
 }
 
-.file-item.uploading {
-  border-color: rgba(99, 102, 241, 0.4);
+.file-item.uploading { border-color: rgba(129, 140, 248, 0.3); }
+.file-item.success { border-color: rgba(52, 211, 153, 0.3); }
+.file-item.error { border-color: rgba(248, 113, 113, 0.3); }
+
+.file-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.file-item.success {
-  border-color: rgba(16, 185, 129, 0.5);
+.file-left { min-width: 0; }
+
+.file-name {
+  font-size: 13px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.file-item.error {
-  border-color: rgba(239, 68, 68, 0.5);
+.file-path {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.file-right { text-align: right; flex-shrink: 0; }
+
+.file-size {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.file-status {
+  font-size: 11px;
+  color: var(--color-primary);
+}
+
+.file-status.error { color: #f87171; }
+.file-status.success { color: #34d399; }
+
+.file-error {
+  font-size: 11px;
+  color: #f87171;
+  margin-top: 4px;
+}
+
+/* Progress */
 .progress-track {
   width: 100%;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
-  margin-top: 0.5rem;
+  margin-top: 8px;
 }
 
 .progress-track.large {
-  height: 8px;
+  height: 6px;
 }
 
 .progress-bar {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #6366f1, #22d3ee);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
   transition: width 0.2s ease;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progress-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.progress-percent {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.progress-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 </style>

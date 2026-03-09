@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 
-// 查询状态
 const input = ref('')
 const loading = ref(false)
 const scanning = ref(false)
@@ -53,22 +52,18 @@ const result = ref<{
   error?: string
 } | null>(null)
 
-// 端口扫描结果
 const portScanResult = ref<{
   ports: { port: number; state: string; service: string; version?: string }[]
   useNmap: boolean
 } | null>(null)
 
-// 复制状态
 const copiedText = ref('')
 
-// 判断是否为IP
 const isIP = computed(() => {
   const val = input.value.trim()
   return /^(\d{1,3}\.){3}\d{1,3}$/.test(val) || val.includes(':')
 })
 
-// 查询
 async function handleLookup() {
   if (!input.value.trim() || loading.value) return
 
@@ -93,15 +88,12 @@ async function handleLookup() {
   }
 }
 
-// 端口扫描
 async function handleScanPorts() {
-  console.log("🚀 ~ handleScanPorts ~ handleScanPorts:", '11')
   if (!result.value?.basic?.ip || scanning.value) return
 
   scanning.value = true
   try {
     const data = await window.api.domainLookup.scanPorts(result.value.basic.ip)
-    console.log("🚀 ~ handleScanPorts ~ data:", data)
     portScanResult.value = data
   } catch {
     portScanResult.value = { ports: [], useNmap: false }
@@ -110,39 +102,35 @@ async function handleScanPorts() {
   }
 }
 
-// 停止查询
 function handleStop() {
   cancelled.value = true
   loading.value = false
 }
 
-// 复制文本
 async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text)
     copiedText.value = text
     setTimeout(() => (copiedText.value = ''), 2000)
   } catch {
-    // 忽略
+    // ignore
   }
 }
 
-// 回车键查询
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') handleLookup()
 }
 
-// 安全信息计算
 const securityInfo = computed(() => {
   if (!result.value?.connection) return null
   const conn = result.value.connection
   const basic = result.value.basic
 
   let riskLevel = '低'
-  let riskColor = 'text-green-400'
+  let riskColor = 'risk-low'
   if (conn.proxy || conn.hosting) {
     riskLevel = '中等'
-    riskColor = 'text-yellow-400'
+    riskColor = 'risk-medium'
   }
 
   return {
@@ -157,455 +145,768 @@ const securityInfo = computed(() => {
 </script>
 
 <template>
-  <div class="domain-lookup h-full flex flex-col p-6 overflow-auto">
-    <!-- 标题区域 -->
-    <div class="text-center mb-6">
-      <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 flex items-center justify-center gap-2">
-        🌐 IP地址分析
-      </h1>
-      <p class="text-[var(--color-text-muted)] text-sm mt-1">
-        使用 MaxMind GeoIP 数据库分析IP地址的地理位置、ISP信息、连接类型等详细数据
-      </p>
+  <div class="domain-page">
+    <!-- Header -->
+    <div class="page-header">
+      <h1 class="page-title">IP地址分析</h1>
+      <p class="page-desc">分析IP地址的地理位置、ISP信息、连接类型等详细数据</p>
     </div>
 
-    <!-- 搜索区域 -->
-    <div class="search-area mb-6 p-4 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-2xl border border-indigo-500/30">
-      <div class="flex items-center gap-2 mb-2">
-        <span class="w-2 h-2 rounded-full bg-green-400"></span>
-        <span class="text-sm font-medium text-[var(--color-text)]">IP地址查询</span>
+    <div class="page-body">
+      <!-- Search -->
+      <div class="search-box">
+        <div class="search-row">
+          <input
+            v-model="input"
+            type="text"
+            :placeholder="isIP ? '例如：8.8.8.8' : '输入域名或IP，例如：baidu.com 或 8.8.8.8'"
+            class="search-input"
+            @keydown="handleKeydown"
+            :disabled="loading"
+          />
+          <button
+            v-if="!loading"
+            @click="handleLookup"
+            :disabled="!input.trim()"
+            class="search-btn"
+          >
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span>分析</span>
+          </button>
+          <button v-else @click="handleStop" class="stop-btn">
+            <svg class="btn-icon spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>停止</span>
+          </button>
+        </div>
       </div>
-      <p class="text-xs text-[var(--color-text-muted)] mb-3">
-        输入IP地址获取详细的地理位置、ISP信息和安全分析
-      </p>
-      <div class="flex gap-3">
-        <input
-          v-model="input"
-          type="text"
-          :placeholder="isIP ? '例如：8.8.8.8' : '输入域名或IP，例如：baidu.com 或 8.8.8.8'"
-          class="flex-1 px-4 py-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all"
-          @keydown="handleKeydown"
-          :disabled="loading"
-        />
-        <button
-          v-if="!loading"
-          @click="handleLookup"
-          :disabled="!input.trim()"
-          class="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium rounded-xl hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <span>分析IP</span>
-        </button>
-        <button
-          v-else
-          @click="handleStop"
-          class="px-6 py-3 bg-gradient-to-r from-red-500 to-orange-500 text-white font-medium rounded-xl hover:from-red-600 hover:to-orange-600 transition-all flex items-center gap-2"
-        >
-          <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span>停止</span>
-        </button>
-      </div>
-    </div>
 
-    <!-- 错误提示 -->
-    <div v-if="result?.error" class="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-      <div class="flex items-center gap-2 text-red-400">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <!-- Error -->
+      <div v-if="result?.error" class="error-banner">
+        <svg class="error-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <span>{{ result.error }}</span>
       </div>
-    </div>
 
-    <!-- 结果区域 - 6卡片布局 -->
-    <div v-if="result && !result.error" class="results-area grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      <!-- 基础信息卡片 -->
-      <div class="card p-5 bg-[var(--color-surface-light)] border border-[var(--color-border)] rounded-2xl">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="font-semibold text-[var(--color-text)]">基础信息</h3>
-          </div>
-        </div>
-
-        <div v-if="result.basic" class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">IP地址</span>
-            <span class="text-indigo-400 font-mono cursor-pointer hover:text-indigo-300" @click="copyText(result.basic.ip)">
-              {{ result.basic.ip }}
-            </span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">IP版本</span>
-            <span class="text-[var(--color-text)]">{{ result.basic.ipVersion }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">地址类型</span>
-            <span class="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">{{ result.basic.addressType }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">全局地址</span>
-            <span class="text-[var(--color-text)]">{{ result.basic.isGlobal ? '是' : '否' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">网络类别</span>
-            <span class="text-[var(--color-text)]">{{ result.basic.networkClass }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">子网信息</span>
-            <span class="text-[var(--color-text)] text-xs max-w-[150px] text-right">{{ result.basic.subnet }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 地理位置卡片 -->
-      <div class="card p-5 bg-[var(--color-surface-light)] border border-[var(--color-border)] rounded-2xl">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="font-semibold text-[var(--color-text)]">地理位置</h3>
-          </div>
-        </div>
-
-        <div v-if="result.location" class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">国家</span>
-            <span class="text-indigo-400">{{ result.location.country }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">国家代码</span>
-            <span class="text-[var(--color-text)]">{{ result.location.countryCode }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">省份/州</span>
-            <span class="text-[var(--color-text)]">{{ result.location.region || '-' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">城市</span>
-            <span class="text-indigo-400">{{ result.location.city }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">邮政编码</span>
-            <span class="text-[var(--color-text)]">{{ result.location.zip || '-' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">时区</span>
-            <span class="text-[var(--color-text)]">{{ result.location.timezone || '-' }}</span>
-          </div>
-          <div v-if="result.location.lat && result.location.lon" class="pt-2 border-t border-[var(--color-border)]">
-            <div class="flex items-center gap-1 text-red-400 text-xs">
-              <span>📍</span>
-              <span>({{ result.location.lat.toFixed(4) }}, {{ result.location.lon.toFixed(4) }})</span>
-            </div>
-            <p class="text-[var(--color-text-muted)] text-xs mt-1">精度半径: 1000 公里</p>
-          </div>
-        </div>
-        <div v-else class="text-[var(--color-text-muted)] text-sm">无法获取位置信息</div>
-      </div>
-
-      <!-- ISP信息卡片 -->
-      <div class="card p-5 bg-[var(--color-surface-light)] border border-[var(--color-border)] rounded-2xl">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="font-semibold text-[var(--color-text)]">ISP信息</h3>
-          </div>
-        </div>
-
-        <div v-if="result.isp" class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">ISP</span>
-            <span class="text-indigo-400 max-w-[150px] text-right truncate" :title="result.isp.isp">{{ result.isp.isp }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">组织</span>
-            <span class="text-[var(--color-text)] max-w-[150px] text-right truncate" :title="result.isp.org">{{ result.isp.org }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">AS号码</span>
-            <span class="text-indigo-400">{{ result.isp.as?.split(' ')[0] || '-' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">AS组织</span>
-            <span class="text-[var(--color-text)] max-w-[150px] text-right truncate" :title="result.isp.asname">{{ result.isp.asname || '-' }}</span>
-          </div>
-        </div>
-        <div v-else class="text-[var(--color-text-muted)] text-sm">无法获取ISP信息</div>
-      </div>
-
-      <!-- 连接信息卡片 -->
-      <div class="card p-5 bg-[var(--color-surface-light)] border border-[var(--color-border)] rounded-2xl">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="font-semibold text-[var(--color-text)]">连接信息</h3>
-          </div>
-        </div>
-
-        <div v-if="result.connection" class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">连接类型</span>
-            <span class="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">{{ result.connection.connectionType }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">移动网络</span>
-            <span :class="result.connection.mobile ? 'text-green-400' : 'text-[var(--color-text)]'">{{ result.connection.mobile ? '是' : '否' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">代理/VPN</span>
-            <span :class="result.connection.proxy ? 'text-yellow-400' : 'text-[var(--color-text)]'">{{ result.connection.proxy ? '是' : '否' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">数据中心</span>
-            <span :class="result.connection.hosting ? 'text-purple-400' : 'text-[var(--color-text)]'">{{ result.connection.hosting ? '是' : '否' }}</span>
-          </div>
-        </div>
-        <div v-else class="text-[var(--color-text-muted)] text-sm">无法获取连接信息</div>
-      </div>
-
-      <!-- 域名信息卡片 -->
-      <div class="card p-5 bg-[var(--color-surface-light)] border border-[var(--color-border)] rounded-2xl">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="font-semibold text-[var(--color-text)]">域名信息</h3>
-          </div>
-        </div>
-
-        <div class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">域名</span>
-            <span class="text-indigo-400 max-w-[180px] text-right truncate">{{ result.domainDetails?.domain || '-' }}</span>
-          </div>
-          <div class="flex justify-between items-start">
-            <span class="text-[var(--color-text-muted)]">反向DNS</span>
-            <span class="text-[var(--color-text)] max-w-[180px] text-right break-all text-xs">{{ result.domainDetails?.reverseDns || '-' }}</span>
-          </div>
-          <!-- 解析的IP列表 -->
-          <div v-if="result.ips.length > 1" class="pt-2 border-t border-[var(--color-border)]">
-            <p class="text-[var(--color-text-muted)] text-xs mb-2">解析的IP地址:</p>
-            <div class="space-y-1">
-              <div v-for="ip in result.ips" :key="ip.address" class="flex items-center gap-2">
-                <span class="text-xs px-1.5 py-0.5 rounded-full" :class="ip.type === 'IPv4' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'">
-                  {{ ip.type }}
-                </span>
-                <code class="text-xs font-mono text-[var(--color-text)] cursor-pointer hover:text-indigo-400" @click="copyText(ip.address)">{{ ip.address }}</code>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 安全信息卡片 -->
-      <div class="card p-5 bg-[var(--color-surface-light)] border border-[var(--color-border)] rounded-2xl">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-green-500 flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="font-semibold text-[var(--color-text)]">安全信息</h3>
-          </div>
-        </div>
-
-        <div v-if="securityInfo" class="space-y-2 text-sm">
-          <div class="flex justify-between items-center">
-            <span class="text-[var(--color-text-muted)]">风险等级</span>
-            <span class="px-2 py-0.5 text-xs rounded-full" :class="securityInfo.riskLevel === '低' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'">
-              {{ securityInfo.riskLevel }}
-            </span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">私有地址</span>
-            <span :class="securityInfo.isPrivate === '是' ? 'text-green-400' : 'text-[var(--color-text)]'">{{ securityInfo.isPrivate }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">回环地址</span>
-            <span :class="securityInfo.isLoopback === '是' ? 'text-yellow-400' : 'text-[var(--color-text)]'">{{ securityInfo.isLoopback }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">多播地址</span>
-            <span class="text-[var(--color-text)]">{{ securityInfo.isMulticast }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-[var(--color-text-muted)]">保留地址</span>
-            <span class="text-[var(--color-text)]">{{ securityInfo.isReserved }}</span>
-          </div>
-        </div>
-        <div v-else class="text-[var(--color-text-muted)] text-sm">无安全信息</div>
-      </div>
-
-      <!-- 技术栈/端口扫描卡片 - 占满整行 -->
-      <div class="card p-5 bg-[var(--color-surface-light)] border border-[var(--color-border)] rounded-2xl md:col-span-2 xl:col-span-3">
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <!-- Results Grid -->
+      <div v-if="result && !result.error" class="results-grid">
+        <!-- Basic Info -->
+        <div class="info-card">
+          <div class="card-header">
+            <div class="card-icon blue">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
               </svg>
             </div>
-            <div>
-              <h3 class="font-semibold text-[var(--color-text)]">技术栈 & 端口扫描</h3>
-              <p class="text-xs text-[var(--color-text-muted)]">检测服务器技术和开放端口</p>
-            </div>
+            <h3 class="card-title">基础信息</h3>
           </div>
-          <button
-            @click="handleScanPorts"
-            :disabled="scanning || !result.basic?.ip"
-            class="px-4 py-2 text-sm bg-gradient-to-r from-violet-500 to-purple-500 text-white rounded-lg hover:from-violet-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-          >
-            <svg v-if="scanning" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>{{ scanning ? '扫描中...' : '扫描端口' }}</span>
-          </button>
+          <div v-if="result.basic" class="card-rows">
+            <div class="row"><span class="row-label">IP地址</span><span class="row-value highlight clickable" @click="copyText(result.basic.ip)">{{ result.basic.ip }}</span></div>
+            <div class="row"><span class="row-label">IP版本</span><span class="row-value">{{ result.basic.ipVersion }}</span></div>
+            <div class="row"><span class="row-label">地址类型</span><span class="row-badge">{{ result.basic.addressType }}</span></div>
+            <div class="row"><span class="row-label">全局地址</span><span class="row-value">{{ result.basic.isGlobal ? '是' : '否' }}</span></div>
+            <div class="row"><span class="row-label">网络类别</span><span class="row-value">{{ result.basic.networkClass }}</span></div>
+            <div class="row"><span class="row-label">子网信息</span><span class="row-value small">{{ result.basic.subnet }}</span></div>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <!-- 技术栈 -->
-          <div>
-            <h4 class="text-sm font-medium text-[var(--color-text-muted)] mb-3">识别的技术</h4>
-            <div v-if="result.tech && (result.tech.server || result.tech.framework || result.tech.cdn)" class="flex flex-wrap gap-2">
-              <span v-if="result.tech.server" class="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-cyan-500">
-                服务器: {{ result.tech.server }}
-              </span>
-              <span v-if="result.tech.framework" class="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500">
-                框架: {{ result.tech.framework }}
-              </span>
-              <span v-if="result.tech.cdn" class="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-orange-500 to-yellow-500">
-                CDN: {{ result.tech.cdn }}
-              </span>
+        <!-- Location -->
+        <div class="info-card">
+          <div class="card-header">
+            <div class="card-icon green">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
             </div>
-            <div v-else class="text-[var(--color-text-muted)] text-sm">未识别到明确的技术栈</div>
+            <h3 class="card-title">地理位置</h3>
           </div>
+          <div v-if="result.location" class="card-rows">
+            <div class="row"><span class="row-label">国家</span><span class="row-value highlight">{{ result.location.country }}</span></div>
+            <div class="row"><span class="row-label">国家代码</span><span class="row-value">{{ result.location.countryCode }}</span></div>
+            <div class="row"><span class="row-label">省份/州</span><span class="row-value">{{ result.location.region || '-' }}</span></div>
+            <div class="row"><span class="row-label">城市</span><span class="row-value highlight">{{ result.location.city }}</span></div>
+            <div class="row"><span class="row-label">邮政编码</span><span class="row-value">{{ result.location.zip || '-' }}</span></div>
+            <div class="row"><span class="row-label">时区</span><span class="row-value">{{ result.location.timezone || '-' }}</span></div>
+            <div v-if="result.location.lat && result.location.lon" class="row-coords">
+              <span>({{ result.location.lat.toFixed(4) }}, {{ result.location.lon.toFixed(4) }})</span>
+            </div>
+          </div>
+          <div v-else class="card-empty">无法获取位置信息</div>
+        </div>
 
-          <!-- 端口扫描结果 -->
-          <div>
-            <h4 class="text-sm font-medium text-[var(--color-text-muted)] mb-3">
-              开放端口
-              <span v-if="portScanResult" class="text-xs ml-2">
-                ({{ portScanResult.useNmap ? 'Nmap' : 'Socket' }})
-              </span>
-            </h4>
-            <div v-if="portScanResult && portScanResult.ports.length > 0" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-              <div
-                v-for="port in portScanResult.ports"
-                :key="port.port"
-                class="p-2 bg-[var(--color-surface)] rounded-lg border border-green-500/30"
-              >
-                <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full bg-green-400"></span>
-                  <span class="text-sm font-mono text-[var(--color-text)]">{{ port.port }}</span>
+        <!-- ISP -->
+        <div class="info-card">
+          <div class="card-header">
+            <div class="card-icon purple">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+            </div>
+            <h3 class="card-title">ISP信息</h3>
+          </div>
+          <div v-if="result.isp" class="card-rows">
+            <div class="row"><span class="row-label">ISP</span><span class="row-value highlight truncate" :title="result.isp.isp">{{ result.isp.isp }}</span></div>
+            <div class="row"><span class="row-label">组织</span><span class="row-value truncate" :title="result.isp.org">{{ result.isp.org }}</span></div>
+            <div class="row"><span class="row-label">AS号码</span><span class="row-value highlight">{{ result.isp.as?.split(' ')[0] || '-' }}</span></div>
+            <div class="row"><span class="row-label">AS组织</span><span class="row-value truncate" :title="result.isp.asname">{{ result.isp.asname || '-' }}</span></div>
+          </div>
+          <div v-else class="card-empty">无法获取ISP信息</div>
+        </div>
+
+        <!-- Connection -->
+        <div class="info-card">
+          <div class="card-header">
+            <div class="card-icon orange">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            </div>
+            <h3 class="card-title">连接信息</h3>
+          </div>
+          <div v-if="result.connection" class="card-rows">
+            <div class="row"><span class="row-label">连接类型</span><span class="row-badge">{{ result.connection.connectionType }}</span></div>
+            <div class="row"><span class="row-label">移动网络</span><span class="row-value" :class="{ 'text-green': result.connection.mobile }">{{ result.connection.mobile ? '是' : '否' }}</span></div>
+            <div class="row"><span class="row-label">代理/VPN</span><span class="row-value" :class="{ 'text-yellow': result.connection.proxy }">{{ result.connection.proxy ? '是' : '否' }}</span></div>
+            <div class="row"><span class="row-label">数据中心</span><span class="row-value" :class="{ 'text-purple': result.connection.hosting }">{{ result.connection.hosting ? '是' : '否' }}</span></div>
+          </div>
+          <div v-else class="card-empty">无法获取连接信息</div>
+        </div>
+
+        <!-- Domain -->
+        <div class="info-card">
+          <div class="card-header">
+            <div class="card-icon cyan">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+            </div>
+            <h3 class="card-title">域名信息</h3>
+          </div>
+          <div class="card-rows">
+            <div class="row"><span class="row-label">域名</span><span class="row-value highlight truncate">{{ result.domainDetails?.domain || '-' }}</span></div>
+            <div class="row"><span class="row-label">反向DNS</span><span class="row-value small break-all">{{ result.domainDetails?.reverseDns || '-' }}</span></div>
+            <div v-if="result.ips.length > 1" class="ip-list">
+              <p class="ip-list-title">解析的IP地址:</p>
+              <div class="ip-items">
+                <div v-for="ip in result.ips" :key="ip.address" class="ip-item">
+                  <span class="ip-type" :class="ip.type === 'IPv4' ? 'ipv4' : 'ipv6'">{{ ip.type }}</span>
+                  <code class="ip-addr clickable" @click="copyText(ip.address)">{{ ip.address }}</code>
                 </div>
-                <p class="text-xs text-[var(--color-text-muted)] mt-1">{{ port.service }}</p>
-                <p v-if="port.version" class="text-xs text-indigo-400 truncate">{{ port.version }}</p>
               </div>
             </div>
-            <div v-else-if="portScanResult && portScanResult.ports.length === 0" class="text-[var(--color-text-muted)] text-sm">
-              未发现开放端口
+          </div>
+        </div>
+
+        <!-- Security -->
+        <div class="info-card">
+          <div class="card-header">
+            <div class="card-icon teal">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
             </div>
-            <div v-else class="text-[var(--color-text-muted)] text-sm">
-              点击"扫描端口"按钮开始扫描
+            <h3 class="card-title">安全信息</h3>
+          </div>
+          <div v-if="securityInfo" class="card-rows">
+            <div class="row"><span class="row-label">风险等级</span><span class="row-badge" :class="securityInfo.riskColor">{{ securityInfo.riskLevel }}</span></div>
+            <div class="row"><span class="row-label">私有地址</span><span class="row-value" :class="{ 'text-green': securityInfo.isPrivate === '是' }">{{ securityInfo.isPrivate }}</span></div>
+            <div class="row"><span class="row-label">回环地址</span><span class="row-value" :class="{ 'text-yellow': securityInfo.isLoopback === '是' }">{{ securityInfo.isLoopback }}</span></div>
+            <div class="row"><span class="row-label">多播地址</span><span class="row-value">{{ securityInfo.isMulticast }}</span></div>
+            <div class="row"><span class="row-label">保留地址</span><span class="row-value">{{ securityInfo.isReserved }}</span></div>
+          </div>
+          <div v-else class="card-empty">无安全信息</div>
+        </div>
+
+        <!-- Tech & Ports - full width -->
+        <div class="info-card full-width">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon violet">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="card-title">技术栈 & 端口扫描</h3>
+                <p class="card-subtitle">检测服务器技术和开放端口</p>
+              </div>
+            </div>
+            <button @click="handleScanPorts" :disabled="scanning || !result.basic?.ip" class="scan-btn">
+              <svg v-if="scanning" class="btn-icon spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>{{ scanning ? '扫描中...' : '扫描端口' }}</span>
+            </button>
+          </div>
+
+          <div class="tech-grid">
+            <div>
+              <h4 class="sub-title">识别的技术</h4>
+              <div v-if="result.tech && (result.tech.server || result.tech.framework || result.tech.cdn)" class="tech-tags">
+                <span v-if="result.tech.server" class="tech-tag blue">服务器: {{ result.tech.server }}</span>
+                <span v-if="result.tech.framework" class="tech-tag purple">框架: {{ result.tech.framework }}</span>
+                <span v-if="result.tech.cdn" class="tech-tag orange">CDN: {{ result.tech.cdn }}</span>
+              </div>
+              <div v-else class="card-empty">未识别到明确的技术栈</div>
+            </div>
+
+            <div>
+              <h4 class="sub-title">
+                开放端口
+                <span v-if="portScanResult" class="sub-tag">({{ portScanResult.useNmap ? 'Nmap' : 'Socket' }})</span>
+              </h4>
+              <div v-if="portScanResult && portScanResult.ports.length > 0" class="port-grid">
+                <div v-for="port in portScanResult.ports" :key="port.port" class="port-item">
+                  <div class="port-header">
+                    <span class="port-dot"></span>
+                    <span class="port-number">{{ port.port }}</span>
+                  </div>
+                  <p class="port-service">{{ port.service }}</p>
+                  <p v-if="port.version" class="port-version">{{ port.version }}</p>
+                </div>
+              </div>
+              <div v-else-if="portScanResult && portScanResult.ports.length === 0" class="card-empty">未发现开放端口</div>
+              <div v-else class="card-empty">点击"扫描端口"按钮开始扫描</div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- 空状态 -->
-    <div v-if="!result && !loading" class="flex-1 flex items-center justify-center">
-      <div class="text-center">
-        <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center">
-          <svg class="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <!-- Empty State -->
+      <div v-if="!result && !loading" class="empty-state">
+        <div class="empty-icon">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
           </svg>
         </div>
-        <p class="text-[var(--color-text-muted)]">输入域名或IP地址开始分析</p>
-        <p class="text-xs text-[var(--color-text-muted)] mt-1">支持分析地理位置、ISP信息、端口扫描等</p>
+        <p class="empty-text">输入域名或IP地址开始分析</p>
+        <p class="empty-hint">支持分析地理位置、ISP信息、端口扫描等</p>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.domain-lookup {
-  background: linear-gradient(180deg, var(--color-surface) 0%, rgba(30, 30, 46, 0.95) 100%);
+.domain-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
 }
 
-.card {
-  transition: all 0.3s ease;
+.page-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.card:hover {
-  border-color: rgba(99, 102, 241, 0.3);
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
 }
 
-/* 结果渐入动画 */
-.results-area > .card {
-  animation: fadeInUp 0.4s ease-out;
+.page-desc {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
 }
 
-.results-area > .card:nth-child(2) {
-  animation-delay: 0.05s;
+.page-body {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 24px;
 }
 
-.results-area > .card:nth-child(3) {
-  animation-delay: 0.1s;
+/* Search */
+.search-box {
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-light);
+  border: 1px solid var(--color-border);
 }
 
-.results-area > .card:nth-child(4) {
-  animation-delay: 0.15s;
+.search-row {
+  display: flex;
+  gap: 10px;
 }
 
-.results-area > .card:nth-child(5) {
-  animation-delay: 0.2s;
+.search-input {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.results-area > .card:nth-child(6) {
-  animation-delay: 0.25s;
+.search-input:focus {
+  border-color: rgba(129, 140, 248, 0.5);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.1);
 }
 
-.results-area > .card:nth-child(7) {
-  animation-delay: 0.3s;
+.search-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.6;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+.search-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--color-primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.search-btn:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.search-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stop-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: #ef4444;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  color: #f87171;
+  font-size: 14px;
+}
+
+.error-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Results Grid */
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.info-card {
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+  animation: cardIn 0.35s ease-out both;
+}
+
+.info-card:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: 0 0 24px rgba(129, 140, 248, 0.06);
+}
+
+.info-card:nth-child(2) { animation-delay: 0.04s; }
+.info-card:nth-child(3) { animation-delay: 0.08s; }
+.info-card:nth-child(4) { animation-delay: 0.12s; }
+.info-card:nth-child(5) { animation-delay: 0.16s; }
+.info-card:nth-child(6) { animation-delay: 0.2s; }
+.info-card:nth-child(7) { animation-delay: 0.24s; }
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.card-icon svg {
+  width: 18px;
+  height: 18px;
+  color: white;
+}
+
+.card-icon.blue { background: linear-gradient(135deg, #3b82f6, #06b6d4); }
+.card-icon.green { background: linear-gradient(135deg, #22c55e, #10b981); }
+.card-icon.purple { background: linear-gradient(135deg, #a855f7, #ec4899); }
+.card-icon.orange { background: linear-gradient(135deg, #f97316, #eab308); }
+.card-icon.cyan { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
+.card-icon.teal { background: linear-gradient(135deg, #14b8a6, #22c55e); }
+.card-icon.violet { background: linear-gradient(135deg, #8b5cf6, #a855f7); }
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.card-subtitle {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.row-label {
+  color: var(--color-text-muted);
+}
+
+.row-value {
+  color: var(--color-text);
+  max-width: 160px;
+  text-align: right;
+}
+
+.row-value.highlight {
+  color: var(--color-primary);
+}
+
+.row-value.clickable {
+  cursor: pointer;
+  font-family: 'SF Mono', monospace;
+}
+
+.row-value.clickable:hover {
+  color: var(--color-secondary);
+}
+
+.row-value.small {
+  font-size: 11px;
+}
+
+.row-value.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-value.break-all {
+  word-break: break-all;
+}
+
+.row-badge {
+  padding: 2px 10px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(129, 140, 248, 0.12);
+  color: var(--color-primary);
+}
+
+.row-badge.risk-low {
+  background: rgba(34, 197, 94, 0.12);
+  color: #34d399;
+}
+
+.row-badge.risk-medium {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+}
+
+.text-green { color: #34d399; }
+.text-yellow { color: #fbbf24; }
+.text-purple { color: #a78bfa; }
+
+.row-coords {
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.card-empty {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+/* IP List */
+.ip-list {
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.ip-list-title {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.ip-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ip-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ip-type {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-weight: 500;
+}
+
+.ip-type.ipv4 { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+.ip-type.ipv6 { background: rgba(168, 85, 247, 0.12); color: #c084fc; }
+
+.ip-addr {
+  font-size: 12px;
+  font-family: 'SF Mono', monospace;
+  color: var(--color-text);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  color: var(--color-primary);
+}
+
+/* Tech & Ports */
+.scan-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.scan-btn:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.25);
+}
+
+.scan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tech-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .tech-grid {
+    grid-template-columns: 1fr;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
+
+.sub-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  margin-bottom: 10px;
+}
+
+.sub-tag {
+  font-size: 11px;
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.tech-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tech-tag {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+}
+
+.tech-tag.blue { background: linear-gradient(135deg, #3b82f6, #06b6d4); }
+.tech-tag.purple { background: linear-gradient(135deg, #a855f7, #ec4899); }
+.tech-tag.orange { background: linear-gradient(135deg, #f97316, #eab308); }
+
+.port-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.port-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.port-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.port-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+}
+
+.port-number {
+  font-size: 13px;
+  font-family: 'SF Mono', monospace;
+  color: var(--color-text);
+}
+
+.port-service {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.port-version {
+  font-size: 11px;
+  color: var(--color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Empty State */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-lg);
+  background: rgba(129, 140, 248, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.empty-icon svg {
+  width: 32px;
+  height: 32px;
+  color: var(--color-primary);
+  opacity: 0.6;
+}
+
+.empty-text {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.empty-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  margin-top: 4px;
+}
+
+.opacity-25 { opacity: 0.25; }
+.opacity-75 { opacity: 0.75; }
 </style>

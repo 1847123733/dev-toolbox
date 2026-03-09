@@ -1,7 +1,6 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
-// --- State & Logic ---
 const currentTime = ref(new Date())
 
 const greeting = computed(() => {
@@ -21,8 +20,17 @@ const timeDisplay = computed(() => {
   })
 })
 
+const dateDisplay = computed(() => {
+  return currentTime.value.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long'
+  })
+})
+
 const isToDo = ref(false)
-// 问询模式更新时间
+
 const inquiryMode = () => {
   requestAnimationFrame(() => {
     currentTime.value = new Date()
@@ -43,91 +51,150 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="home-box relative overflow-hidden">
-    <!-- 背景装饰 -->
-    <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-      <div
-        class="absolute top-[-20%] left-[-10%] w-150 h-150 rounded-full bg-primary/20 blur-[120px] animate-pulse-slow"
-      ></div>
-      <div
-        class="absolute bottom-[-20%] right-[-10%] w-125 h-125 rounded-full bg-secondary/20 blur-[100px] animate-pulse-slow animation-delay-2000"
-      ></div>
-      <div class="grid-overlay absolute inset-0 opacity-20"></div>
+  <div class="home">
+    <!-- Background effects -->
+    <div class="home-bg">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+      <div class="grid-overlay"></div>
     </div>
 
-    <!-- 内容区域 -->
-    <div class="relative z-10 flex flex-col items-center gap-6">
-      <h1 class="text-4xl lg:text-6xl font-bold tracking-tight animate-fade-in-up">
-        <span
-          class="bg-clip-text text-transparent bg-linear-to-r from-white via-indigo-100 to-indigo-200 drop-shadow-lg"
-        >
-          {{ greeting }}，开发者
-        </span>
+    <!-- Content -->
+    <div class="home-content">
+      <h1 class="greeting animate-in">
+        {{ greeting }}，开发者
       </h1>
 
-      <div class="time-container relative p-4 group animate-fade-in-up animation-delay-200">
-        <div
-          class="absolute inset-0 bg-white/5 rounded-2xl blur-lg group-hover:bg-white/10 transition-colors duration-500 opacity-0 group-hover:opacity-100"
-        ></div>
-        <div
-          class="relative text-5xl lg:text-6xl font-mono font-light text-white tracking-widest leading-none drop-shadow-2xl font-variant-numeric-tabular"
-        >
-          {{ timeDisplay }}
-        </div>
+      <div class="time-block animate-in delay-1">
+        <div class="time-display">{{ timeDisplay }}</div>
       </div>
+
+      <p class="date-display animate-in delay-2">{{ dateDisplay }}</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.home-box {
+.home {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: radial-gradient(
-    circle at center,
-    var(--color-surface-light) 0%,
-    var(--color-surface) 100%
-  );
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.home-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  animation: float 10s ease-in-out infinite;
+}
+
+.orb-1 {
+  width: 500px;
+  height: 500px;
+  top: -15%;
+  left: -5%;
+  background: rgba(129, 140, 248, 0.12);
+}
+
+.orb-2 {
+  width: 400px;
+  height: 400px;
+  bottom: -15%;
+  right: -5%;
+  background: rgba(167, 139, 250, 0.1);
+  animation-delay: 3s;
+  animation-direction: reverse;
+}
+
+.orb-3 {
+  width: 300px;
+  height: 300px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(34, 211, 238, 0.06);
+  animation-delay: 5s;
 }
 
 .grid-overlay {
+  position: absolute;
+  inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(circle at center, black 0%, transparent 80%);
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 0%, transparent 75%);
 }
 
-/* 缓慢脉冲动画 */
-@keyframes pulse-slow {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.1);
-  }
+.home-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
-.animate-pulse-slow {
-  animation: pulse-slow 8s ease-in-out infinite;
+.greeting {
+  font-size: clamp(28px, 5vw, 52px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.7) 50%, #c7d2fe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
 }
 
-.animation-delay-2000 {
-  animation-delay: 2s;
+.time-block {
+  position: relative;
+  padding: 12px 24px;
+  border-radius: var(--radius-xl);
 }
 
-/* 淡入上浮动画 */
+.time-display {
+  font-size: clamp(40px, 6vw, 64px);
+  font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace;
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.date-display {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* Animations */
+.animate-in {
+  animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.delay-1 { animation-delay: 0.15s; }
+.delay-2 { animation-delay: 0.3s; }
+
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -135,16 +202,18 @@ onUnmounted(() => {
   }
 }
 
-.animate-fade-in-up {
-  animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  opacity: 0; /* 初始隐藏 */
-}
-
-.animation-delay-200 {
-  animation-delay: 0.2s;
-}
-
-.font-variant-numeric-tabular {
-  font-variant-numeric: tabular-nums;
+@keyframes float {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1) translate(0, 0);
+  }
+  33% {
+    opacity: 0.8;
+    transform: scale(1.05) translate(10px, -10px);
+  }
+  66% {
+    opacity: 0.5;
+    transform: scale(0.95) translate(-10px, 10px);
+  }
 }
 </style>

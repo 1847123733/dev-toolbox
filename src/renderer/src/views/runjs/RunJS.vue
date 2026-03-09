@@ -212,37 +212,26 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="runjs-container flex h-full bg-[#1e1e2e]">
-    <!-- 左侧面板 (NPM + 文件) -->
-    <div class="left-panel w-64 flex flex-col bg-[#1e1e2e] border-r border-[#3f3f5a]">
-      <!-- 面板切换标签 -->
-      <div class="panel-tabs flex border-b border-[#3f3f5a]">
+  <div class="runjs-container">
+    <div class="left-panel">
+      <div class="panel-tabs">
         <button
           @click="activePanel = 'npm'"
-          class="flex-1 py-3 text-sm font-medium transition-all"
-          :class="
-            activePanel === 'npm'
-              ? 'text-indigo-400 bg-indigo-500/10 border-b-2 border-indigo-500'
-              : 'text-gray-400 hover:text-white hover:bg-[#2a2a3e]'
-          "
+          class="panel-tab"
+          :class="{ active: activePanel === 'npm' }"
         >
           NPM 包
         </button>
         <button
           @click="activePanel = 'files'"
-          class="flex-1 py-3 text-sm font-medium transition-all"
-          :class="
-            activePanel === 'files'
-              ? 'text-indigo-400 bg-indigo-500/10 border-b-2 border-indigo-500'
-              : 'text-gray-400 hover:text-white hover:bg-[#2a2a3e]'
-          "
+          class="panel-tab"
+          :class="{ active: activePanel === 'files' }"
         >
           最近文件
         </button>
       </div>
 
-      <!-- 面板内容 -->
-      <div class="panel-content flex-1 overflow-hidden">
+      <div class="panel-content">
         <Transition name="fade" mode="out-in">
           <NpmPanel v-if="activePanel === 'npm'" />
           <FilePanel
@@ -256,8 +245,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- 中间代码编辑器 -->
-    <div class="editor-area flex-1 flex flex-col min-w-0">
+    <div class="editor-area">
       <CodeEditor
         v-if="activeFile"
         :code="activeFile.content"
@@ -274,8 +262,7 @@ onUnmounted(() => {
       />
     </div>
 
-    <!-- 右侧输出面板 -->
-    <div class="output-area w-96 flex flex-col bg-[#1e1e2e] border-l border-[#3f3f5a]">
+    <div class="output-area">
       <OutputPanel
         :output="output"
         :error="error"
@@ -291,7 +278,66 @@ onUnmounted(() => {
 
 <style scoped>
 .runjs-container {
-  background: #1e1e2e;
+  display: flex;
+  height: 100%;
+  background: var(--color-surface);
+}
+
+.left-panel {
+  width: 256px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+}
+
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panel-tab {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.panel-tab:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.panel-tab.active {
+  color: var(--color-primary);
+  background: rgba(129, 140, 248, 0.06);
+  border-bottom-color: var(--color-primary);
+}
+
+.panel-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.output-area {
+  width: 384px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
 }
 
 .fade-enter-active,

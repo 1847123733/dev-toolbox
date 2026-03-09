@@ -184,20 +184,13 @@ function clearHistory() {
 </script>
 
 <template>
-  <div class="http-client h-full flex flex-col overflow-hidden">
-    <!-- 标题 -->
-    <div class="px-4 py-3 border-b border-[var(--color-border)] shrink-0">
-      <h1 class="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
-        HTTP 请求工具
-      </h1>
-      <p class="text-[var(--color-text-muted)] text-xs mt-0.5">
-        发送 HTTP 请求，支持自定义 Headers、Body、Query Params，自动使用应用代理
-      </p>
+  <div class="http-client">
+    <div class="http-header">
+      <h1 class="http-title">HTTP 请求工具</h1>
+      <p class="http-desc">发送 HTTP 请求，支持自定义 Headers、Body、Query Params，自动使用应用代理</p>
     </div>
 
-    <!-- 主体 -->
-    <div class="flex flex-1 overflow-hidden relative">
-      <!-- 历史记录面板 -->
+    <div class="http-body">
       <HistoryPanel
         :history="history"
         :visible="showHistory"
@@ -207,19 +200,15 @@ function clearHistory() {
         @toggle="showHistory = !showHistory"
       />
 
-      <!-- 请求/响应区域 -->
-      <div class="flex-1 flex flex-col overflow-hidden">
-        <!-- 请求面板 -->
-        <div class="flex-1 min-h-0 border-b border-[var(--color-border)]">
+      <div class="http-main">
+        <div class="http-request">
           <RequestPanel
             v-model="currentRequest"
             :loading="loading"
             @send="sendRequest"
           />
         </div>
-
-        <!-- 响应面板 -->
-        <div class="flex-1 min-h-0">
+        <div class="http-response">
           <ResponsePanel
             :response="response"
             :loading="loading"
@@ -232,6 +221,54 @@ function clearHistory() {
 
 <style scoped>
 .http-client {
-  background: linear-gradient(180deg, var(--color-surface) 0%, rgba(30, 30, 46, 0.95) 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.http-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.http-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+
+.http-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.http-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.http-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.http-request {
+  flex: 1;
+  min-height: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.http-response {
+  flex: 1;
+  min-height: 0;
 }
 </style>

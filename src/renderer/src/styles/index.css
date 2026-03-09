@@ -1,24 +1,35 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
-/* 自定义颜色主题 */
 :root {
-  --color-primary: #6366f1;
-  --color-primary-dark: #4f46e5;
-  --color-secondary: #8b5cf6;
-  --color-accent: #06b6d4;
-  --color-surface: #1e1e2e;
-  --color-surface-light: #2a2a3e;
-  --color-surface-lighter: #363651;
-  --color-text: #e2e8f0;
-  --color-text-muted: #94a3b8;
-  --color-border: #3f3f5a;
-  --color-success: #22c55e;
-  --color-warning: #eab308;
-  --color-error: #ef4444;
+  --color-primary: #818cf8;
+  --color-primary-dark: #6366f1;
+  --color-primary-glow: rgba(129, 140, 248, 0.35);
+  --color-secondary: #a78bfa;
+  --color-accent: #22d3ee;
+  --color-surface: #0f1117;
+  --color-surface-light: #171923;
+  --color-surface-lighter: #1e2130;
+  --color-surface-card: #1a1d2e;
+  --color-text: #e8ecf4;
+  --color-text-muted: #8892a8;
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-hover: rgba(255, 255, 255, 0.12);
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-elevated: 0 8px 40px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-glow: 0 0 20px var(--color-primary-glow);
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 基础样式 */
 * {
   margin: 0;
   padding: 0;
@@ -32,20 +43,17 @@ html, body, #app {
 }
 
 body {
-  font-family: 'Space Grotesk', 'Segoe UI Variable', 'Segoe UI', 'Noto Sans', sans-serif;
-  background:
-    radial-gradient(1200px 800px at 15% -10%, rgba(99, 102, 241, 0.12), transparent 55%),
-    radial-gradient(900px 700px at 95% 0%, rgba(6, 182, 212, 0.1), transparent 50%),
-    linear-gradient(180deg, #0b0d14 0%, #0f111a 100%);
+  font-family: 'Inter', 'SF Pro Display', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--color-surface);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
 }
 
-/* 滚动条样式 */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -53,21 +61,19 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-surface-lighter);
+  background: rgba(255, 255, 255, 0.14);
 }
 
-/* 选中文本样式 */
 ::selection {
   background: var(--color-primary);
   color: white;
 }
 
-/* 标题栏拖动区域 */
 .drag-region {
   -webkit-app-region: drag;
 }
@@ -76,10 +82,10 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* 动画 */
+/* ── Transitions ── */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-normal);
 }
 
 .fade-enter-from,
@@ -89,49 +95,35 @@ body {
 
 .slide-enter-active,
 .slide-leave-active {
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform var(--transition-normal), opacity var(--transition-normal);
 }
 
 .slide-enter-from {
-  transform: translateX(-10px);
+  transform: translateX(-8px);
   opacity: 0;
 }
 
 .slide-leave-to {
-  transform: translateX(10px);
+  transform: translateX(8px);
   opacity: 0;
 }
 
-/* 按钮悬停效果 */
-.btn-glow {
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-glow::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.1) 50%, transparent 60%);
-  transform: translateX(-100%);
-  transition: transform 0.4s ease;
-}
-
-.btn-glow:hover::after {
-  transform: translateX(100%);
-}
-
-/* 玻璃态效果 */
+/* ── Utility Classes ── */
 .glass {
-  background: rgba(30, 30, 46, 0.8);
-  backdrop-filter: blur(12px);
+  background: rgba(23, 25, 35, 0.75);
+  backdrop-filter: blur(20px) saturate(1.2);
   border: 1px solid var(--color-border);
 }
 
-/* 渐变边框 */
+.glass-light {
+  background: rgba(30, 33, 48, 0.6);
+  backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid var(--color-border);
+}
+
 .gradient-border {
   position: relative;
-  background: var(--color-surface);
+  background: var(--color-surface-card);
 }
 
 .gradient-border::before {
@@ -146,4 +138,33 @@ body {
   mask-composite: exclude;
   border-radius: inherit;
   pointer-events: none;
+}
+
+.btn-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.08) 50%, transparent 60%);
+  transform: translateX(-100%);
+  transition: transform var(--transition-slow);
+}
+
+.btn-glow:hover::after {
+  transform: translateX(100%);
+}
+
+/* ── Noise Texture Overlay ── */
+.noise-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
 }
