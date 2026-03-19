@@ -393,7 +393,12 @@ async function callAiApi(
     baseURL: aiConfig.url
   })
 
-  const stream = await openai.chat.completions.create({ ...payload, stream: true })
+  const request: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
+    ...(payload as Omit<OpenAI.Chat.ChatCompletionCreateParamsStreaming, 'stream'>),
+    stream: true
+  }
+
+  const stream = await openai.chat.completions.create(request)
 
   let content = ''
   const toolCalls: ToolCall[] = []

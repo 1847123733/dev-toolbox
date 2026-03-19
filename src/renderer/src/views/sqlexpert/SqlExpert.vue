@@ -214,7 +214,7 @@
           <h3 class="section-title">AI 智能体设置 <span class="section-tag">deepseek</span></h3>
           <div class="form-group">
             <label>URL</label>
-            <input v-model="aiForm.url" placeholder="https://api.deepseek.com/v1/chat/completions" />
+            <input v-model="aiForm.url" disabled placeholder="https://api.deepseek.com/v1" />
           </div>
           <div class="form-group">
             <label>API Key</label>
@@ -357,7 +357,7 @@ const expandedTools = ref<Set<string>>(new Set())
 
 // 设置表单
 const dbForm = ref({ host: 'localhost', port: 3306, user: 'root', password: '', database: '' })
-const aiForm = ref({ url: 'https://api.deepseek.com/v1/chat/completions', apiKey: '', model: 'deepseek-chat' })
+const aiForm = ref({ url: 'https://api.deepseek.com/v1', apiKey: '', model: 'deepseek-chat' })
 const testingDb = ref(false)
 const dbTestResult = ref<{ success: boolean; message: string } | null>(null)
 const schemaStatus = ref<{ success: boolean; message: string } | null>(null)
