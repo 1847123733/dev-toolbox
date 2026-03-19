@@ -241,6 +241,85 @@ interface HttpClientAPI {
   send: (payload: HttpClientRequestPayload) => Promise<HttpClientResponse>
 }
 
+// ============ SQL 专家相关类型 ============
+
+interface SqlExpertDbConfig {
+  host: string
+  port: number
+  user: string
+  password: string
+  database: string
+}
+
+interface SqlExpertAiConfig {
+  url: string
+  apiKey: string
+  model: string
+}
+
+interface SqlExpertConfig {
+  db: SqlExpertDbConfig
+  ai: SqlExpertAiConfig
+}
+
+interface SqlExpertToolCallResult {
+  id: string
+  name: string
+  args: Record<string, unknown>
+  result: Record<string, unknown>
+  status: string
+  errorMessage?: string
+}
+
+interface SqlExpertAPI {
+  testDb: (config: SqlExpertDbConfig) => Promise<{ success: boolean; message: string }>
+  askAi: (payload: {
+    messages: Array<{ role: string; content: string }>
+    schema: string
+  }) => Promise<{
+    success: boolean
+    reply?: string
+    toolCalls?: SqlExpertToolCallResult[]
+    error?: string
+  }>
+  executeSql: (sql: string) => Promise<{
+    success: boolean
+    ok?: boolean
+    truncated?: boolean
+    totalRows?: number
+    returnedRows?: number
+    rows?: Array<Record<string, unknown>>
+    error?: string
+  }>
+  saveConfig: (config: SqlExpertConfig) => Promise<{ success: boolean; error?: string }>
+  loadConfig: () => Promise<{
+    config: SqlExpertConfig | null
+    schema: string
+    schemaPath: string
+    prompt: string
+    promptPath: string
+  }>
+  loadSchema: (dbConfig?: SqlExpertDbConfig) => Promise<{
+    success: boolean
+    schema?: string
+    schemaPath?: string
+    prompt?: string
+    promptPath?: string
+    tableCount?: number
+    error?: string
+  }>
+  describeTable: (tableNames: string[]) => Promise<{
+    success: boolean
+    rows?: Array<Record<string, unknown>>
+    error?: string
+  }>
+  // 流式进度事件监听
+  onAiContent: (callback: (content: string) => void) => void
+  onAiToolStart: (callback: (data: { id: string; name: string; args: Record<string, unknown> }) => void) => void
+  onAiToolDone: (callback: (data: { id: string; name: string; args: Record<string, unknown>; status: string; result: Record<string, unknown>; errorMessage?: string }) => void) => void
+  removeAiListeners: () => void
+}
+
 interface API {
   window: WindowAPI
   app: AppAPI
@@ -251,6 +330,7 @@ interface API {
   dock: DockAPI
   httpClient: HttpClientAPI
   oss: OssAPI
+  sqlExpert: SqlExpertAPI
 }
 
 interface CodeRunResult {

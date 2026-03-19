@@ -8,6 +8,7 @@ import { setupDomainLookup } from './services/domainLookup'
 import { setupDockService, closeDockWindow } from './services/dockService'
 import { setupOssManager } from './services/ossManager'
 import { setupHttpClient } from './services/httpClient'
+import { setupSqlExpert } from './services/sqlExpert'
 import { notify } from './services/notification'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const AutoLaunch = require('auto-launch')
@@ -423,6 +424,7 @@ if (!gotTheLock) {
     setupDomainLookup()
     setupOssManager()
     setupHttpClient()
+    setupSqlExpert()
 
     createWindow()
 

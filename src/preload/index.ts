@@ -151,6 +151,52 @@ const api = {
     removeUploadListener: () => {
       ipcRenderer.removeAllListeners('oss:uploadProgress')
     }
+  },
+
+  // SQL 专家
+  sqlExpert: {
+    testDb: (config: {
+      host: string
+      port: number
+      user: string
+      password: string
+      database: string
+    }) => ipcRenderer.invoke('sql-expert:test-db', config),
+    askAi: (payload: {
+      messages: Array<{ role: string; content: string }>
+      schema: string
+    }) => ipcRenderer.invoke('sql-expert:ask-ai', payload),
+    executeSql: (sql: string) => ipcRenderer.invoke('sql-expert:execute-sql', sql),
+    saveConfig: (config: {
+      db: { host: string; port: number; user: string; password: string; database: string }
+      ai: { url: string; apiKey: string; model: string }
+    }) => ipcRenderer.invoke('sql-expert:save-config', config),
+    loadConfig: () => ipcRenderer.invoke('sql-expert:load-config'),
+    loadSchema: (dbConfig?: {
+      host: string
+      port: number
+      user: string
+      password: string
+      database: string
+    }) => ipcRenderer.invoke('sql-expert:load-schema', dbConfig),
+    describeTable: (tableNames: string[]) =>
+      ipcRenderer.invoke('sql-expert:describe-table', tableNames),
+
+    // 流式进度事件监听
+    onAiContent: (callback: (content: string) => void) => {
+      ipcRenderer.on('sql-expert:ai-content', (_, content) => callback(content))
+    },
+    onAiToolStart: (callback: (data: { id: string; name: string; args: Record<string, unknown> }) => void) => {
+      ipcRenderer.on('sql-expert:ai-tool-start', (_, data) => callback(data))
+    },
+    onAiToolDone: (callback: (data: { id: string; name: string; args: Record<string, unknown>; status: string; result: Record<string, unknown>; errorMessage?: string }) => void) => {
+      ipcRenderer.on('sql-expert:ai-tool-done', (_, data) => callback(data))
+    },
+    removeAiListeners: () => {
+      ipcRenderer.removeAllListeners('sql-expert:ai-content')
+      ipcRenderer.removeAllListeners('sql-expert:ai-tool-start')
+      ipcRenderer.removeAllListeners('sql-expert:ai-tool-done')
+    }
   }
 }
 

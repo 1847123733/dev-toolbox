@@ -13,7 +13,8 @@ const tools = [
   { id: 'domain', name: '域名查询', icon: 'globe' },
   { id: 'dock', name: 'macOS Dock', icon: 'dock' },
   { id: 'oss', name: 'OSS管理', icon: 'cloud' },
-  { id: 'httpclient', name: 'HTTP请求', icon: 'send' }
+  { id: 'httpclient', name: 'HTTP请求', icon: 'send' },
+  { id: 'sqlexpert', name: 'SQL专家', icon: 'database' }
 ]
 
 const toolComponents: Record<string, Component> = {
@@ -23,6 +24,7 @@ const toolComponents: Record<string, Component> = {
   dock: defineAsyncComponent(() => import('./views/dock/DockSettings.vue')),
   oss: defineAsyncComponent(() => import('./views/oss/OssManager.vue')),
   httpclient: defineAsyncComponent(() => import('./views/httpclient/HttpClient.vue')),
+  sqlexpert: defineAsyncComponent(() => import('./views/sqlexpert/SqlExpert.vue')),
   settings: defineAsyncComponent(() => import('./views/settings/Settings.vue'))
 }
 

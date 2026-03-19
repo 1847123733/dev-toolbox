@@ -169,6 +169,54 @@ interface AppAPI {
   onUpdateDownloaded: (callback: () => void) => void
 }
 
+interface SqlExpertAPI {
+  testDb: (config: {
+    host: string; port: number; user: string; password: string; database: string
+  }) => Promise<{ success: boolean; message: string }>
+  askAi: (payload: {
+    messages: Array<{ role: string; content: string }>
+    schema: string
+  }) => Promise<{
+    success: boolean
+    reply?: string
+    toolCalls?: Array<{
+      id: string; name: string; args: Record<string, unknown>
+      result?: Record<string, unknown>; status: string; errorMessage?: string
+    }>
+    error?: string
+  }>
+  executeSql: (sql: string) => Promise<{
+    success: boolean; ok?: boolean; truncated?: boolean
+    totalRows?: number; returnedRows?: number
+    rows?: Array<Record<string, unknown>>; error?: string
+  }>
+  saveConfig: (config: {
+    db: { host: string; port: number; user: string; password: string; database: string }
+    ai: { url: string; apiKey: string; model: string }
+  }) => Promise<{ success: boolean; error?: string }>
+  loadConfig: () => Promise<{
+    config: {
+      db: { host: string; port: number; user: string; password: string; database: string }
+      ai: { url: string; apiKey: string; model: string }
+    } | null
+    schema: string
+    schemaPath: string
+    prompt: string
+    promptPath: string
+  }>
+  loadSchema: (dbConfig?: {
+    host: string; port: number; user: string; password: string; database: string
+  }) => Promise<{ success: boolean; schema?: string; schemaPath?: string; prompt?: string; promptPath?: string; tableCount?: number; error?: string }>
+  describeTable: (tableNames: string[]) => Promise<{
+    success: boolean; rows?: Array<Record<string, unknown>>; error?: string
+  }>
+  // 流式进度事件监听
+  onAiContent: (callback: (content: string) => void) => void
+  onAiToolStart: (callback: (data: { id: string; name: string; args: Record<string, unknown> }) => void) => void
+  onAiToolDone: (callback: (data: { id: string; name: string; args: Record<string, unknown>; status: string; result: Record<string, unknown>; errorMessage?: string }) => void) => void
+  removeAiListeners: () => void
+}
+
 interface API {
   window: WindowAPI
   codeRunner: CodeRunnerAPI
@@ -179,6 +227,7 @@ interface API {
   app: AppAPI
   oss: OssAPI
   httpClient: any
+  sqlExpert: SqlExpertAPI
 }
 
 declare global {

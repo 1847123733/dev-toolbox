@@ -84,7 +84,8 @@ const getIcon = (iconName: string) => {
     globe: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />`,
     dock: `<rect x="2" y="16" width="20" height="5" rx="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" fill="none" /><circle cx="6" cy="18.5" r="1" fill="currentColor" /><circle cx="12" cy="18.5" r="1" fill="currentColor" /><circle cx="18" cy="18.5" r="1" fill="currentColor" />`,
     cloud: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 15a4 4 0 014-4h1.5a4.5 4.5 0 018.9-.9A3.5 3.5 0 0118 18H7a4 4 0 01-4-3z" />`,
-    send: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />`
+    send: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />`,
+    database: `<ellipse cx="12" cy="5" rx="9" ry="3" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" fill="none" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />`
   }
   return icons[iconName] || icons.code
 }
