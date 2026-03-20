@@ -2,10 +2,11 @@
  * SQL 专家服务
  * 主进程侧：数据库连接管理、AI 请求、SQL 校验、Schema 动态生成
  */
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, dialog } from 'electron'
 import * as mysql from 'mysql2/promise'
-import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { join, extname, relative } from 'path'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
+import { readdir, stat, readFile } from 'fs/promises'
 import OpenAI from 'openai'
 
 // ============ 类型定义 ============
@@ -27,6 +28,7 @@ interface AiConfig {
 interface SqlExpertConfig {
   db: DbConfig
   ai: AiConfig
+  backendProjectRoot: string
 }
 
 interface AskAiPayload {
@@ -78,7 +80,13 @@ function loadConfigFromDisk(): SqlExpertConfig | null {
   const configPath = getConfigPath()
   if (!existsSync(configPath)) return null
   try {
-    return JSON.parse(readFileSync(configPath, 'utf-8'))
+    const parsed = JSON.parse(readFileSync(configPath, 'utf-8')) as Partial<SqlExpertConfig>
+    if (!parsed?.db || !parsed?.ai) return null
+    return {
+      db: parsed.db,
+      ai: parsed.ai,
+      backendProjectRoot: typeof parsed.backendProjectRoot === 'string' ? parsed.backendProjectRoot : ''
+    }
   } catch {
     return null
   }
@@ -106,8 +114,72 @@ function getPromptPath(): string {
   return join(getConfigDir(), 'sql-prompt.md')
 }
 
-// 这里的 SQL_PROMPT_TEMPLATE 由后续定义，这里使用 loadPromptFromDisk 需要放在后面或者先声明
-// 为避免作用域问题，稍后通过重构将其下移，或将 SQL_PROMPT_TEMPLATE 上移
+const PROMPT_SCAN_SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  'target',
+  '.idea',
+  '.vscode',
+  'logs',
+  'log',
+  'tmp',
+  'temp',
+  'coverage',
+  '.next',
+  '.nuxt'
+])
+
+const PROMPT_SCAN_TEXT_EXTENSIONS = new Set([
+  '.ts',
+  '.js',
+  '.tsx',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.java',
+  '.kt',
+  '.kts',
+  '.go',
+  '.py',
+  '.cs',
+  '.php',
+  '.rb',
+  '.xml',
+  '.sql',
+  '.yml',
+  '.yaml',
+  '.json',
+  '.properties',
+  '.md'
+])
+
+const PROMPT_SCAN_FILE_MAX_BYTES = 256 * 1024
+const PROMPT_SCAN_SUMMARY_MAX_LENGTH = 48_000
+const PROMPT_SCAN_MAX_FILES = 3_000
+
+const PROMPT_IMPORTANT_PATH_KEYWORDS = [
+  'repository',
+  'repo',
+  'service',
+  'mapper',
+  'controller',
+  'dao',
+  'query',
+  'sql',
+  'order',
+  'product',
+  'activity',
+  'store',
+  'goods',
+  'inventory'
+]
+
+const PROMPT_IMPORTANT_CONTENT_REGEX =
+  /(select\s+.+from|left\s+join|inner\s+join|where\s+|group\s+by|order\s+by|mapper|repository|service|controller|query|商品|订单|活动|门店|库存)/i
+
+const SQL_PROMPT_GENERATION_INSTRUCTION = `现在这个项目接入了 ai 查询，ai 可以直接访问数据库查询数据（ai 直接编写sql），这个项目是后端，请你扫描一下这个项目的逻辑，重点看主要的查询逻辑；然后编写一份文档，用于交给 ai 并附加在提示词中，重点提示 ai 某些特殊的查询逻辑，或是数据之间的关联关系、含义等，或者是你认为 ai 必须知道的一些事情。另外，ai 已经知道了数据库的全部表结构和数据，你不必额外写数据结构。你不需要关心 ai 如何实现的，只需要编写一个文档。你只需要关心主要的逻辑，如商品、订单、活动、门店等（不局限于我提到的这些），一些你认为较少使用的功能或本身就冷门的数据不需要查看。`
 
 // ============ SQL 校验（复用 agentRuntime.ts 核心逻辑） ============
 
@@ -127,10 +199,22 @@ function extractSelectClause(sql: string): string {
       continue
     }
 
-    if (char === "'" || char === '"' || char === '`') { quote = char; continue }
-    if (char === '[') { quote = ']'; continue }
-    if (char === '(') { depth += 1; continue }
-    if (char === ')') { depth = Math.max(0, depth - 1); continue }
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char
+      continue
+    }
+    if (char === '[') {
+      quote = ']'
+      continue
+    }
+    if (char === '(') {
+      depth += 1
+      continue
+    }
+    if (char === ')') {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
 
     if (depth === 0 && selectIndex === -1 && lowerSql.startsWith('select ', index)) {
       selectIndex = index + 6
@@ -164,10 +248,26 @@ function splitTopLevelCsv(value: string): string[] {
       continue
     }
 
-    if (char === "'" || char === '"' || char === '`') { quote = char; current += char; continue }
-    if (char === '[') { quote = ']'; current += char; continue }
-    if (char === '(') { depth += 1; current += char; continue }
-    if (char === ')') { depth = Math.max(0, depth - 1); current += char; continue }
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char
+      current += char
+      continue
+    }
+    if (char === '[') {
+      quote = ']'
+      current += char
+      continue
+    }
+    if (char === '(') {
+      depth += 1
+      current += char
+      continue
+    }
+    if (char === ')') {
+      depth = Math.max(0, depth - 1)
+      current += char
+      continue
+    }
     if (char === ',' && depth === 0) {
       if (current.trim()) items.push(current.trim())
       current = ''
@@ -245,57 +345,158 @@ async function ensurePool(config?: DbConfig): Promise<mysql.Pool> {
 
 async function destroyPool(): Promise<void> {
   if (connectionPool) {
-    await connectionPool.end().catch(() => { /* ignore */ })
+    await connectionPool.end().catch(() => {
+      /* ignore */
+    })
     connectionPool = null
   }
 }
 
-// ============ 内置 Prompt 模板（基于 sql-prompt.md） ============
-
-const SQL_PROMPT_TEMPLATE = `#### 1. 全局查询原则（必须优先套用）
-
-1. 先限定业务域：绝大多数查询都应先带 \`center_code\`，再按 \`store_code/user_code\` 收敛。
-2. 逻辑删除：项目框架默认会自动过滤 \`mark=true\`。AI 直写 SQL 时，建议显式加 \`mark=1\`（若表有该字段）。
-3. 商品可售不是看 \`product_sku\`：应以 \`center_product.enable=1\` 作为是否在当前配送中心可售的准入条件。
-4. 库存口径不是单表：常用可售库存来自 \`location_batch_inventory.available_count\`，并且常带 \`sale_flag=1\`、\`shipper_code\` 对齐。
-5. 价格口径优先级：门店成交价优先 \`center_product.multiple_price[priceLevel]\`，否则 \`center_product.market_price\`；不要直接拿 \`product_sku.price/market_price\` 当最终价。
-
-#### 2. 核心业务关系（查询时按这个思路 join）
-
-1. 商品主链路：\`product_spu -> product_sku -> center_product\`。
-2. 库存主链路：\`center_product -> location_batch_inventory\`（批次场景再接 \`product_batch_info\`）。
-3. 订单主链路：\`daily_master_orders(主单) -> daily_orders(子单) -> daily_orders_detail(明细)\`。
-4. 活动主链路：\`product_activity_config -> activity_sku -> (product_activity_store/time_limit_activity_*)\`。
-5. 门店与活动范围：\`store_info.store_code\` 是门店，\`store_info.store_type\` 常被当"渠道门店编码"。
-
-#### 3. 订单查询口径（最容易查错）
-
-1. 订单有两套状态，不可混用：
-   - \`daily_master_orders.order_status\`：支付态（NOT_PAY/SUCCESS/CLOSED/REFUND...）
-   - \`daily_master_orders.status\`：履约流转态（PAY_FINISH/STOCK_SERVICING/WAIT_DISTRIBUTION/.../RECEIVED/FINISH/CANCELED）
-2. 订单维度字段要分清：主单号 \`master_order_code\`，子单号 \`order_code\`。
-3. 预售订单与普通订单分表：预售主单在 \`pre_daily_master_orders\`。
-
-#### 4. SQL 生成约束建议
-
-1. 涉及"商品可售/价格/库存"的查询，必须从 \`center_product\` 起表，并携带 \`center_code\`。
-2. 涉及"活动有效性"的查询，必须同时判断活动状态、时间窗口、门店范围。
-3. 涉及"订单列表或统计"的查询，必须明确使用 \`order_status\` 还是 \`status\`，不得混淆。`
-
 function loadPromptFromDisk(): string {
   const promptPath = getPromptPath()
-  if (!existsSync(promptPath)) {
-    writeFileSync(promptPath, SQL_PROMPT_TEMPLATE, 'utf-8')
-    return SQL_PROMPT_TEMPLATE
-  }
+  if (!existsSync(promptPath)) return ''
   try {
     return readFileSync(promptPath, 'utf-8')
   } catch {
-    return SQL_PROMPT_TEMPLATE
+    return ''
   }
 }
 
+function isSkippableDirectory(dirname: string): boolean {
+  const normalized = dirname.trim().toLowerCase()
+  return PROMPT_SCAN_SKIP_DIRS.has(normalized)
+}
+
+function isTextCodeFile(filePath: string): boolean {
+  return PROMPT_SCAN_TEXT_EXTENSIONS.has(extname(filePath).toLowerCase())
+}
+
+function scorePath(relativePath: string): number {
+  const lower = relativePath.toLowerCase()
+  return PROMPT_IMPORTANT_PATH_KEYWORDS.reduce((score, keyword) => {
+    return lower.includes(keyword) ? score + 2 : score
+  }, 0)
+}
+
+function collectSnippetLines(content: string, maxLines = 10): string[] {
+  const lines = content.split(/\r?\n/)
+  const snippets: string[] = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (!PROMPT_IMPORTANT_CONTENT_REGEX.test(trimmed)) continue
+    snippets.push(trimmed.length > 180 ? `${trimmed.slice(0, 180)}...` : trimmed)
+    if (snippets.length >= maxLines) break
+  }
+  return snippets
+}
+
+async function buildBackendProjectSummary(rootPath: string): Promise<string> {
+  const queue = [rootPath]
+  let walkedFiles = 0
+  const candidates: Array<{ relativePath: string; score: number; snippets: string[] }> = []
+
+  while (queue.length && walkedFiles < PROMPT_SCAN_MAX_FILES) {
+    const current = queue.shift()
+    if (!current) break
+
+    let entries
+    try {
+      entries = await readdir(current, { withFileTypes: true })
+    } catch {
+      continue
+    }
+
+    for (const entry of entries) {
+      const fullPath = join(current, entry.name)
+      if (entry.isDirectory()) {
+        if (isSkippableDirectory(entry.name)) continue
+        queue.push(fullPath)
+        continue
+      }
+      if (!entry.isFile()) continue
+      if (!isTextCodeFile(fullPath)) continue
+      walkedFiles += 1
+
+      let fileStat
+      try {
+        fileStat = await stat(fullPath)
+      } catch {
+        continue
+      }
+      if (fileStat.size > PROMPT_SCAN_FILE_MAX_BYTES || fileStat.size <= 0) continue
+
+      const relPath = relative(rootPath, fullPath).replace(/\\/g, '/')
+      const pathScore = scorePath(relPath)
+
+      let content = ''
+      try {
+        content = await readFile(fullPath, 'utf-8')
+      } catch {
+        continue
+      }
+
+      const snippets = collectSnippetLines(content)
+      const contentScore = snippets.length * 2
+      const score = pathScore + contentScore
+      if (score <= 0) continue
+
+      candidates.push({ relativePath: relPath, score, snippets })
+    }
+  }
+
+  const picked = candidates
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 80)
+    .map((item, index) => {
+      const snippets = item.snippets.length ? item.snippets.map((line) => `- ${line}`).join('\n') : '- (无明显 SQL 相关片段)'
+      return `### ${index + 1}. ${item.relativePath}\n重要性分值: ${item.score}\n${snippets}`
+    })
+    .join('\n\n')
+
+  const summary = [
+    `项目根目录: ${rootPath}`,
+    `扫描文件总数(上限 ${PROMPT_SCAN_MAX_FILES}): ${walkedFiles}`,
+    `命中候选文件数: ${candidates.length}`,
+    '',
+    '以下是与查询逻辑可能最相关的代码摘要：',
+    picked || '- 未检出明显与查询逻辑相关的文件'
+  ].join('\n')
+
+  return summary.length > PROMPT_SCAN_SUMMARY_MAX_LENGTH
+    ? `${summary.slice(0, PROMPT_SCAN_SUMMARY_MAX_LENGTH)}\n\n(摘要已截断)`
+    : summary
+}
+
+async function generateSqlPromptByAi(aiConfig: AiConfig, backendProjectRoot: string): Promise<string> {
+  const projectSummary = await buildBackendProjectSummary(backendProjectRoot)
+  const payload = {
+    model: aiConfig.model,
+    temperature: 0.1,
+    messages: [
+      {
+        role: 'system',
+        content:
+          '你是一位资深后端架构与数据查询顾问。请基于给定项目摘要输出高质量 markdown 文档，内容简洁、准确、可直接用于 AI 查询提示词。'
+      },
+      {
+        role: 'user',
+        content: `${SQL_PROMPT_GENERATION_INSTRUCTION}\n\n---\n\n项目扫描摘要：\n${projectSummary}`
+      }
+    ]
+  } as any
+
+  const response = await callAiApi(aiConfig, payload)
+  const content = response.content.trim()
+  if (!content) throw new Error('AI 未生成有效的 sql-prompt 内容')
+  return content
+}
+
 function buildSystemPrompt(schema: string, prompt: string): string {
+  const promptSection = prompt.trim()
+    ? `\n### 查询建议\n${prompt.trim()}\n`
+    : ''
+
   return `你是一个专业、严谨的企业数据查询助手，服务于本系统的真实业务用户。
 你只能通过工具访问数据库。query_database 工具最多返回 10 行样例；describe_table_schema 工具会返回完整字段清单。
 你的目标是在合法、合规、最小必要权限、以及结果可解释的前提下，高效帮助用户查询、聚合和分析数据。
@@ -316,13 +517,13 @@ function buildSystemPrompt(schema: string, prompt: string): string {
 1. 严禁生成 INSERT、UPDATE、DELETE、DROP、ALTER、TRUNCATE、CREATE、GRANT 等修改性语句。
 2. 严禁自行编写查询 information_schema 或 mysql 等系统库的 SQL；如需字段信息，只能调用 describe_table_schema 工具。
 
-### 查询建议
-${prompt}
 
 ### 数据库表清单（仅含表名和中文语义）
 \`\`\`text
 ${schema}
-\`\`\``
+\`\`\`
+${promptSection}
+`
 }
 
 function getTools(): AiToolDefinition[] {
@@ -331,12 +532,16 @@ function getTools(): AiToolDefinition[] {
       type: 'function',
       function: {
         name: 'query_database',
-        description: '执行只读 SQL 查询。仅允许 SELECT 或 WITH...SELECT，且输出列必须使用 AS 指定表头。',
+        description:
+          '执行只读 SQL 查询。仅允许 SELECT 或 WITH...SELECT，且输出列必须使用 AS 指定表头。',
         parameters: {
           type: 'object',
           additionalProperties: false,
           properties: {
-            sql: { type: 'string', description: '待读取数据库的 SQL。必须是只读查询，并为输出列使用 AS 指定表头。' },
+            sql: {
+              type: 'string',
+              description: '待读取数据库的 SQL。必须是只读查询，并为输出列使用 AS 指定表头。'
+            },
             reason: { type: 'string', description: '本次查询目的和预期用途。' }
           },
           required: ['sql', 'reason']
@@ -353,7 +558,11 @@ function getTools(): AiToolDefinition[] {
           additionalProperties: false,
           properties: {
             tableName: { type: 'string', description: '要查询结构的单个表名。' },
-            tableNames: { type: 'array', items: { type: 'string' }, description: '要查询结构的多个表名列表。' },
+            tableNames: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '要查询结构的多个表名列表。'
+            },
             reason: { type: 'string', description: '为什么需要查看这张表的结构。' }
           },
           anyOf: [{ required: ['tableName'] }, { required: ['tableNames'] }]
@@ -371,11 +580,13 @@ interface StreamCallbacks {
 
 function upsertToolCall(toolCalls: ToolCall[], delta: any): void {
   const idx = typeof delta?.index === 'number' ? delta.index : toolCalls.length
-  const existing = toolCalls[idx] || {
-    id: delta?.id || `tool_call_${idx}`,
-    type: 'function',
-    function: { name: '', arguments: '' }
-  } as ToolCall
+  const existing =
+    toolCalls[idx] ||
+    ({
+      id: delta?.id || `tool_call_${idx}`,
+      type: 'function',
+      function: { name: '', arguments: '' }
+    } as ToolCall)
 
   if (delta?.id) existing.id = delta.id
   if (delta?.function?.name) existing.function.name += delta.function.name
@@ -426,6 +637,19 @@ async function callAiApi(
 // ============ 工具调度 ============
 
 const TOOL_RESULT_ROW_LIMIT = 10
+const SQL_QUERY_TIMEOUT_MS = 60_000
+
+async function queryWithTimeout(
+  executor: mysql.Pool | mysql.Connection,
+  sql: string,
+  values?: Array<string | number | boolean | null>
+): Promise<[unknown, unknown]> {
+  return executor.query({
+    sql,
+    timeout: SQL_QUERY_TIMEOUT_MS,
+    values: values || []
+  })
+}
 
 async function dispatchToolCall(
   pool: mysql.Pool,
@@ -436,7 +660,10 @@ async function dispatchToolCall(
 
   if (toolCall.function.name === 'query_database') {
     validateSql(args.sql)
-    const [rows] = await pool.query(args.sql) as [Array<Record<string, unknown>>, unknown]
+    const [rows] = (await queryWithTimeout(pool, args.sql)) as [
+      Array<Record<string, unknown>>,
+      unknown
+    ]
     const totalRows = rows.length
     const truncated = totalRows > TOOL_RESULT_ROW_LIMIT
     return {
@@ -452,7 +679,9 @@ async function dispatchToolCall(
   if (toolCall.function.name === 'describe_table_schema') {
     const tableNames: string[] = Array.isArray(args.tableNames)
       ? args.tableNames
-      : args.tableName ? [args.tableName] : []
+      : args.tableName
+        ? [args.tableName]
+        : []
 
     const validNames = tableNames
       .map((n: string) => String(n).trim())
@@ -472,7 +701,7 @@ async function dispatchToolCall(
       'ORDER BY TABLE_NAME, ORDINAL_POSITION'
     ].join('\n')
 
-    const [rows] = await pool.query(sql) as [Array<Record<string, unknown>>, unknown]
+    const [rows] = (await queryWithTimeout(pool, sql)) as [Array<Record<string, unknown>>, unknown]
     return {
       ok: true,
       reason: args.reason || `查询表 ${validNames.join('、')} 的结构`,
@@ -490,10 +719,11 @@ async function dispatchToolCall(
 
 function getSchemaTableNames(schema: string): Set<string> {
   return new Set(
-    schema.split(/\r?\n/)
-      .map(line => line.trim())
+    schema
+      .split(/\r?\n/)
+      .map((line) => line.trim())
       .filter(Boolean)
-      .map(line => line.match(/^(\S+)/)?.[1] || '')
+      .map((line) => line.match(/^(\S+)/)?.[1] || '')
       .filter(Boolean)
   )
 }
@@ -518,14 +748,21 @@ export function setupSqlExpert(): void {
     } catch (error) {
       return { success: false, message: error instanceof Error ? error.message : '连接失败' }
     } finally {
-      if (conn) await conn.end().catch(() => { /* ignore */ })
+      if (conn)
+        await conn.end().catch(() => {
+          /* ignore */
+        })
     }
   })
 
   // 保存配置
   ipcMain.handle('sql-expert:save-config', async (_event, config: SqlExpertConfig) => {
     try {
-      saveConfigToDisk(config)
+      const normalized: SqlExpertConfig = {
+        ...config,
+        backendProjectRoot: typeof config.backendProjectRoot === 'string' ? config.backendProjectRoot : ''
+      }
+      saveConfigToDisk(normalized)
       // 配置变更后重建连接池
       await destroyPool()
       return { success: true }
@@ -539,14 +776,83 @@ export function setupSqlExpert(): void {
     const config = loadConfigFromDisk()
     const schema = loadSchemaFromDisk()
     const prompt = loadPromptFromDisk()
-    return { 
-      config, 
-      schema, 
-      schemaPath: getSchemaPath(), 
-      prompt, 
-      promptPath: getPromptPath() 
+    return {
+      config,
+      schema,
+      schemaPath: getSchemaPath(),
+      prompt,
+      promptPath: getPromptPath(),
+      backendProjectRoot: config?.backendProjectRoot || ''
     }
   })
+
+  // 选择后端项目根目录
+  ipcMain.handle('sql-expert:select-backend-root', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: '选择后端项目根目录'
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false }
+    }
+    const path = result.filePaths[0]
+    return { success: true, path }
+  })
+
+  // 清空后端项目根目录
+  ipcMain.handle('sql-expert:clear-backend-root', async () => {
+    try {
+      const config = loadConfigFromDisk()
+      if (!config) return { success: false, error: '请先保存 SQL 专家配置' }
+      saveConfigToDisk({ ...config, backendProjectRoot: '' })
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '清空失败' }
+    }
+  })
+
+  // 生成 sql-prompt.md
+  ipcMain.handle(
+    'sql-expert:generate-prompt',
+    async (_event, payload?: { forceRegenerate?: boolean; backendProjectRoot?: string }) => {
+      try {
+        const config = loadConfigFromDisk()
+        if (!config || !config?.ai?.url || !config?.ai?.apiKey || !config?.ai?.model) {
+          throw new Error('请先在设置中完整配置 AI 参数')
+        }
+        const backendProjectRoot = (payload?.backendProjectRoot || config.backendProjectRoot || '').trim()
+        if (!backendProjectRoot) {
+          throw new Error('请先选择后端项目根目录')
+        }
+        if (!existsSync(backendProjectRoot)) {
+          throw new Error('后端项目根目录不存在，请重新选择')
+        }
+        if (backendProjectRoot !== config.backendProjectRoot) {
+          saveConfigToDisk({ ...config, backendProjectRoot })
+        }
+
+        const promptPath = getPromptPath()
+        if (payload?.forceRegenerate && existsSync(promptPath)) {
+          unlinkSync(promptPath)
+        }
+
+        const prompt = await generateSqlPromptByAi(config.ai, backendProjectRoot)
+        writeFileSync(promptPath, prompt, 'utf-8')
+
+        return {
+          success: true,
+          message: 'sql-prompt.md 生成成功',
+          prompt,
+          promptPath
+        }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '生成 sql-prompt.md 失败'
+        }
+      }
+    }
+  )
 
   // 动态加载 Schema（从数据库 information_schema 查询）
   ipcMain.handle('sql-expert:load-schema', async (_event, dbConfig?: DbConfig) => {
@@ -565,24 +871,25 @@ export function setupSqlExpert(): void {
         connectTimeout: 10000
       })
 
-      const [rows] = await conn.query(
+      const [rows] = (await queryWithTimeout(
+        conn,
         'SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME',
         [config.database]
-      ) as [Array<{ TABLE_NAME: string; TABLE_COMMENT: string }>, unknown]
+      )) as [Array<{ TABLE_NAME: string; TABLE_COMMENT: string }>, unknown]
 
       // 生成与 daily_orange_schema.txt 同格式的文本
       const schemaText = rows
-        .map(row => `${row.TABLE_NAME} ${row.TABLE_COMMENT || ''}`.trim())
+        .map((row) => `${row.TABLE_NAME} ${row.TABLE_COMMENT || ''}`.trim())
         .join('\n\n')
 
       cachedSchema = schemaText
       saveSchemaToDisk(schemaText)
-      
+
       const prompt = loadPromptFromDisk()
 
-      return { 
-        success: true, 
-        schema: schemaText, 
+      return {
+        success: true,
+        schema: schemaText,
         tableCount: rows.length,
         schemaPath: getSchemaPath(),
         prompt,
@@ -591,7 +898,10 @@ export function setupSqlExpert(): void {
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : '加载表结构失败' }
     } finally {
-      if (conn) await conn.end().catch(() => { /* ignore */ })
+      if (conn)
+        await conn.end().catch(() => {
+          /* ignore */
+        })
     }
   })
 
@@ -600,12 +910,12 @@ export function setupSqlExpert(): void {
     try {
       const pool = await ensurePool()
       const names = (Array.isArray(tableNames) ? tableNames : [tableNames])
-        .map(n => String(n).trim())
+        .map((n) => String(n).trim())
         .filter(Boolean)
 
       if (!names.length) throw new Error('请传入至少一个表名')
 
-      const quoted = names.map(n => `'${n.replace(/'/g, "''")}'`).join(', ')
+      const quoted = names.map((n) => `'${n.replace(/'/g, "''")}'`).join(', ')
       const sql = [
         'SELECT TABLE_NAME AS 表名, ORDINAL_POSITION AS 字段顺序,',
         '  COLUMN_NAME AS 字段名, COLUMN_TYPE AS 字段类型,',
@@ -617,7 +927,7 @@ export function setupSqlExpert(): void {
         'ORDER BY TABLE_NAME, ORDINAL_POSITION'
       ].join('\n')
 
-      const [rows] = await pool.query(sql) as [Array<Record<string, unknown>>, unknown]
+      const [rows] = (await queryWithTimeout(pool, sql)) as [Array<Record<string, unknown>>, unknown]
       return { success: true, rows }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : '查询表结构失败' }
@@ -629,7 +939,7 @@ export function setupSqlExpert(): void {
     try {
       validateSql(sql)
       const pool = await ensurePool()
-      const [rows] = await pool.query(sql) as [Array<Record<string, unknown>>, unknown]
+      const [rows] = (await queryWithTimeout(pool, sql)) as [Array<Record<string, unknown>>, unknown]
       const totalRows = rows.length
       const truncated = totalRows > TOOL_RESULT_ROW_LIMIT
       return {
@@ -641,7 +951,11 @@ export function setupSqlExpert(): void {
         rows: truncated ? rows.slice(0, TOOL_RESULT_ROW_LIMIT) : rows
       }
     } catch (error) {
-      return { success: false, ok: false, error: error instanceof Error ? error.message : '查询失败' }
+      return {
+        success: false,
+        ok: false,
+        error: error instanceof Error ? error.message : '查询失败'
+      }
     }
   })
 
@@ -662,14 +976,23 @@ export function setupSqlExpert(): void {
       const messages = [...payload.messages]
       const prompt = loadPromptFromDisk()
       const systemMessage = { role: 'system', content: buildSystemPrompt(schema, prompt) }
-      const allMessages: Array<{ role: string; content: string; tool_calls?: ToolCall[]; tool_call_id?: string }> = [
-        systemMessage,
-        ...messages
-      ]
+      const allMessages: Array<{
+        role: string
+        content: string
+        tool_calls?: ToolCall[]
+        tool_call_id?: string
+      }> = [systemMessage, ...messages]
 
       const MAX_ROUNDS = 15
       let finalReply = ''
-      const toolCallResults: Array<{ id: string; name: string; args: Record<string, unknown>; result: Record<string, unknown>; status: string; errorMessage?: string }> = []
+      const toolCallResults: Array<{
+        id: string
+        name: string
+        args: Record<string, unknown>
+        result: Record<string, unknown>
+        status: string
+        errorMessage?: string
+      }> = []
 
       const mergeReply = (prev: string, next: string) => {
         const p = prev.trimEnd()
@@ -702,7 +1025,11 @@ export function setupSqlExpert(): void {
         }
 
         if (!aiResponse.toolCalls?.length) {
-          return { success: true, reply: finalReply || '未生成有效回复', toolCalls: toolCallResults }
+          return {
+            success: true,
+            reply: finalReply || '未生成有效回复',
+            toolCalls: toolCallResults
+          }
         }
 
         // 将 assistant 消息（含 tool_calls）加入历史
@@ -721,9 +1048,20 @@ export function setupSqlExpert(): void {
 
           let toolResult: Record<string, unknown>
           let parsedArgs: Record<string, unknown> = {}
-          try { parsedArgs = JSON.parse(toolCall.function.arguments || '{}') } catch { /* ignore */ }
+          try {
+            parsedArgs = JSON.parse(toolCall.function.arguments || '{}')
+          } catch {
+            /* ignore */
+          }
 
-          const callRecord: { id: string; name: string; args: Record<string, unknown>; result: Record<string, unknown>; status: string; errorMessage?: string } = {
+          const callRecord: {
+            id: string
+            name: string
+            args: Record<string, unknown>
+            result: Record<string, unknown>
+            status: string
+            errorMessage?: string
+          } = {
             id: toolCall.id,
             name: toolCall.function.name,
             args: parsedArgs,
@@ -734,7 +1072,11 @@ export function setupSqlExpert(): void {
 
           // 通知渲染进程：工具调用开始
           if (!sender.isDestroyed()) {
-            sender.send('sql-expert:ai-tool-start', { id: toolCall.id, name: toolCall.function.name, args: parsedArgs })
+            sender.send('sql-expert:ai-tool-start', {
+              id: toolCall.id,
+              name: toolCall.function.name,
+              args: parsedArgs
+            })
           }
 
           try {

@@ -193,16 +193,28 @@ interface SqlExpertAPI {
   saveConfig: (config: {
     db: { host: string; port: number; user: string; password: string; database: string }
     ai: { url: string; apiKey: string; model: string }
+    backendProjectRoot: string
   }) => Promise<{ success: boolean; error?: string }>
   loadConfig: () => Promise<{
     config: {
       db: { host: string; port: number; user: string; password: string; database: string }
       ai: { url: string; apiKey: string; model: string }
+      backendProjectRoot: string
     } | null
     schema: string
     schemaPath: string
     prompt: string
     promptPath: string
+    backendProjectRoot: string
+  }>
+  selectBackendRoot: () => Promise<{ success: boolean; path?: string }>
+  clearBackendRoot: () => Promise<{ success: boolean; error?: string }>
+  generatePrompt: (payload?: { forceRegenerate?: boolean; backendProjectRoot?: string }) => Promise<{
+    success: boolean
+    message?: string
+    prompt?: string
+    promptPath?: string
+    error?: string
   }>
   loadSchema: (dbConfig?: {
     host: string; port: number; user: string; password: string; database: string

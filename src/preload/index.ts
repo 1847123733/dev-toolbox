@@ -170,8 +170,13 @@ const api = {
     saveConfig: (config: {
       db: { host: string; port: number; user: string; password: string; database: string }
       ai: { url: string; apiKey: string; model: string }
+      backendProjectRoot: string
     }) => ipcRenderer.invoke('sql-expert:save-config', config),
     loadConfig: () => ipcRenderer.invoke('sql-expert:load-config'),
+    selectBackendRoot: () => ipcRenderer.invoke('sql-expert:select-backend-root'),
+    clearBackendRoot: () => ipcRenderer.invoke('sql-expert:clear-backend-root'),
+    generatePrompt: (payload?: { forceRegenerate?: boolean; backendProjectRoot?: string }) =>
+      ipcRenderer.invoke('sql-expert:generate-prompt', payload),
     loadSchema: (dbConfig?: {
       host: string
       port: number

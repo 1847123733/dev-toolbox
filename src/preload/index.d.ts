@@ -260,6 +260,7 @@ interface SqlExpertAiConfig {
 interface SqlExpertConfig {
   db: SqlExpertDbConfig
   ai: SqlExpertAiConfig
+  backendProjectRoot: string
 }
 
 interface SqlExpertToolCallResult {
@@ -298,6 +299,16 @@ interface SqlExpertAPI {
     schemaPath: string
     prompt: string
     promptPath: string
+    backendProjectRoot: string
+  }>
+  selectBackendRoot: () => Promise<{ success: boolean; path?: string }>
+  clearBackendRoot: () => Promise<{ success: boolean; error?: string }>
+  generatePrompt: (payload?: { forceRegenerate?: boolean; backendProjectRoot?: string }) => Promise<{
+    success: boolean
+    message?: string
+    prompt?: string
+    promptPath?: string
+    error?: string
   }>
   loadSchema: (dbConfig?: SqlExpertDbConfig) => Promise<{
     success: boolean

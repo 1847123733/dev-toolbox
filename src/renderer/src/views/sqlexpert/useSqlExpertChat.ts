@@ -162,7 +162,10 @@ export function useSqlExpertChat() {
   const schemaPath = ref('')
   const prompt = ref('')
   const promptPath = ref('')
+  const backendProjectRoot = ref('')
   const schemaLoading = ref(false)
+  const promptGenerating = ref(false)
+  const promptGenerateStatus = ref<{ success: boolean; message: string } | null>(null)
 
   const activeSession = computed(() =>
     sessions.value.find(s => s.id === activeChatId.value) || null
@@ -218,12 +221,11 @@ export function useSqlExpertChat() {
   const initSchema = async () => {
     try {
       const result = await window.api.sqlExpert.loadConfig()
-      if (result.schema) {
-        schema.value = result.schema
-        schemaPath.value = result.schemaPath
-        prompt.value = result.prompt
-        promptPath.value = result.promptPath
-      }
+      schema.value = result.schema || ''
+      schemaPath.value = result.schemaPath || ''
+      prompt.value = result.prompt || ''
+      promptPath.value = result.promptPath || ''
+      backendProjectRoot.value = result.backendProjectRoot || result.config?.backendProjectRoot || ''
     } catch (e) {
       console.warn('加载配置失败', e)
     }
@@ -246,6 +248,47 @@ export function useSqlExpertChat() {
       return { success: false, error: e instanceof Error ? e.message : '加载失败' }
     } finally {
       schemaLoading.value = false
+    }
+  }
+
+  const selectBackendRoot = async () => {
+    const result = await window.api.sqlExpert.selectBackendRoot()
+    if (result.success && result.path) {
+      backendProjectRoot.value = result.path
+    }
+    return result
+  }
+
+  const clearBackendRoot = async () => {
+    const result = await window.api.sqlExpert.clearBackendRoot()
+    if (result.success) {
+      backendProjectRoot.value = ''
+    }
+    return result
+  }
+
+  const generatePrompt = async (payload?: { forceRegenerate?: boolean }) => {
+    promptGenerating.value = true
+    promptGenerateStatus.value = null
+    try {
+      const result = await window.api.sqlExpert.generatePrompt({
+        ...payload,
+        backendProjectRoot: backendProjectRoot.value || ''
+      })
+      if (result.success) {
+        prompt.value = result.prompt || ''
+        promptPath.value = result.promptPath || ''
+        promptGenerateStatus.value = { success: true, message: result.message || 'sql-prompt.md 生成成功' }
+      } else {
+        promptGenerateStatus.value = { success: false, message: result.error || '生成失败' }
+      }
+      return result
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '生成失败'
+      promptGenerateStatus.value = { success: false, message }
+      return { success: false, error: message }
+    } finally {
+      promptGenerating.value = false
     }
   }
 
@@ -409,8 +452,14 @@ export function useSqlExpertChat() {
     schemaPath,
     prompt,
     promptPath,
+    backendProjectRoot,
     schemaLoading,
+    promptGenerating,
+    promptGenerateStatus,
     loadSchema,
+    selectBackendRoot,
+    clearBackendRoot,
+    generatePrompt,
     sendMessage,
     regenerateMessage,
     selectChat,

@@ -240,6 +240,32 @@
           <div v-if="schemaStatus" class="schema-status" :class="schemaStatus.success ? 'success' : 'error'">
             {{ schemaStatus.message }}
           </div>
+          <div style="margin-top: 12px;">
+            <div class="schema-preview-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span>后端项目根目录</span>
+            </div>
+            <div class="form-actions-row" style="margin-bottom: 8px;">
+              <button class="btn btn-outline" @click="onSelectBackendRoot">选择后端项目文件夹</button>
+              <button class="btn btn-outline" @click="onClearBackendRoot" :disabled="!backendProjectRoot">清空</button>
+            </div>
+            <div class="schema-preview-content" style="max-height: 66px;">{{ backendProjectRoot || '未选择' }}</div>
+            <button
+              class="btn btn-primary btn-full"
+              style="margin-top: 10px;"
+              @click="onGeneratePrompt"
+              :disabled="promptGenerating || !backendProjectRoot"
+            >
+              {{ promptGenerating ? '生成中...' : '生成 sql-prompt.md（可重新加载）' }}
+            </button>
+            <div
+              v-if="promptGenerateStatus"
+              class="schema-status"
+              :class="promptGenerateStatus.success ? 'success' : 'error'"
+              style="margin-top: 8px;"
+            >
+              {{ promptGenerateStatus.message }}
+            </div>
+          </div>
           <div v-if="schema || prompt" class="schema-preview" style="gap: 16px; display: flex; flex-direction: column;">
             <div v-if="schema">
               <div class="schema-preview-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -338,8 +364,14 @@ const {
   schemaPath,
   prompt,
   promptPath,
+  backendProjectRoot,
   schemaLoading,
+  promptGenerating,
+  promptGenerateStatus,
   loadSchema,
+  selectBackendRoot,
+  clearBackendRoot,
+  generatePrompt,
   sendMessage,
   regenerateMessage,
   selectChat,
@@ -474,11 +506,24 @@ const onLoadSchema = async () => {
   }
 }
 
+const onSelectBackendRoot = async () => {
+  await selectBackendRoot()
+}
+
+const onClearBackendRoot = async () => {
+  await clearBackendRoot()
+}
+
+const onGeneratePrompt = async () => {
+  await generatePrompt({ forceRegenerate: true })
+}
+
 const saveSettings = async () => {
   try {
     await window.api.sqlExpert.saveConfig({
       db: { ...dbForm.value },
-      ai: { ...aiForm.value }
+      ai: { ...aiForm.value },
+      backendProjectRoot: backendProjectRoot.value || ''
     })
     showSettings.value = false
   } catch (e) {
@@ -498,6 +543,7 @@ onMounted(async () => {
       if (ai) {
         aiForm.value = { ...aiForm.value, ...ai }
       }
+      backendProjectRoot.value = result.config.backendProjectRoot || result.backendProjectRoot || ''
     }
   } catch (e) {
     console.warn('加载配置失败', e)
