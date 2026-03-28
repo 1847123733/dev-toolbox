@@ -174,17 +174,28 @@ interface SqlExpertAPI {
     host: string; port: number; user: string; password: string; database: string
   }) => Promise<{ success: boolean; message: string }>
   askAi: (payload: {
-    messages: Array<{ role: string; content: string }>
+    requestId?: string
+    messages: Array<{ role: string; content: string; status?: string; toolCalls?: any[] }>
     schema: string
   }) => Promise<{
     success: boolean
+    requestId?: string
     reply?: string
     toolCalls?: Array<{
       id: string; name: string; args: Record<string, unknown>
       result?: Record<string, unknown>; status: string; errorMessage?: string
     }>
+    usage?: {
+      promptTokens: number
+      completionTokens: number
+      totalTokens: number
+      promptCacheHitTokens: number
+      promptCacheMissTokens: number
+    }
+    status?: 'done' | 'stopped'
     error?: string
   }>
+  cancelAskAi: (payload: { requestId: string }) => Promise<{ success: boolean; message: string }>
   executeSql: (sql: string) => Promise<{
     success: boolean; ok?: boolean; truncated?: boolean
     totalRows?: number; returnedRows?: number
@@ -193,39 +204,47 @@ interface SqlExpertAPI {
   saveConfig: (config: {
     db: { host: string; port: number; user: string; password: string; database: string }
     ai: { url: string; apiKey: string; model: string }
-    backendProjectRoot: string
   }) => Promise<{ success: boolean; error?: string }>
   loadConfig: () => Promise<{
     config: {
       db: { host: string; port: number; user: string; password: string; database: string }
       ai: { url: string; apiKey: string; model: string }
-      backendProjectRoot: string
     } | null
     schema: string
     schemaPath: string
-    prompt: string
-    promptPath: string
-    backendProjectRoot: string
-  }>
-  selectBackendRoot: () => Promise<{ success: boolean; path?: string }>
-  clearBackendRoot: () => Promise<{ success: boolean; error?: string }>
-  generatePrompt: (payload?: { forceRegenerate?: boolean; backendProjectRoot?: string }) => Promise<{
-    success: boolean
-    message?: string
-    prompt?: string
-    promptPath?: string
-    error?: string
+    memories: Array<{ id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' }>
+    memoryPath: string
+    memoryScope: string
+    memoryCount: number
   }>
   loadSchema: (dbConfig?: {
     host: string; port: number; user: string; password: string; database: string
-  }) => Promise<{ success: boolean; schema?: string; schemaPath?: string; prompt?: string; promptPath?: string; tableCount?: number; error?: string }>
+  }) => Promise<{
+    success: boolean
+    schema?: string
+    schemaPath?: string
+    tableCount?: number
+    memories?: Array<{ id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' }>
+    memoryPath?: string
+    memoryScope?: string
+    memoryCount?: number
+    error?: string
+  }>
+  loadMemories: (payload?: { database?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    memories: Array<{ id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' }>
+    memoryPath: string
+    memoryScope: string
+    memoryCount: number
+    error?: string
+  }>
   describeTable: (tableNames: string[]) => Promise<{
     success: boolean; rows?: Array<Record<string, unknown>>; error?: string
   }>
   // 流式进度事件监听
-  onAiContent: (callback: (content: string) => void) => void
-  onAiToolStart: (callback: (data: { id: string; name: string; args: Record<string, unknown> }) => void) => void
-  onAiToolDone: (callback: (data: { id: string; name: string; args: Record<string, unknown>; status: string; result: Record<string, unknown>; errorMessage?: string }) => void) => void
+  onAiContent: (callback: (data: { requestId: string; content: string }) => void) => void
+  onAiToolStart: (callback: (data: { requestId: string; id: string; name: string; args: Record<string, unknown> }) => void) => void
+  onAiToolDone: (callback: (data: { requestId: string; id: string; name: string; args: Record<string, unknown>; status: string; result: Record<string, unknown>; errorMessage?: string }) => void) => void
   removeAiListeners: () => void
 }
 

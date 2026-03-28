@@ -163,20 +163,17 @@ const api = {
       database: string
     }) => ipcRenderer.invoke('sql-expert:test-db', config),
     askAi: (payload: {
-      messages: Array<{ role: string; content: string }>
+      requestId?: string
+      messages: Array<{ role: string; content: string; status?: string; toolCalls?: any[] }>
       schema: string
     }) => ipcRenderer.invoke('sql-expert:ask-ai', payload),
+    cancelAskAi: (payload: { requestId: string }) => ipcRenderer.invoke('sql-expert:cancel-ask-ai', payload),
     executeSql: (sql: string) => ipcRenderer.invoke('sql-expert:execute-sql', sql),
     saveConfig: (config: {
       db: { host: string; port: number; user: string; password: string; database: string }
       ai: { url: string; apiKey: string; model: string }
-      backendProjectRoot: string
     }) => ipcRenderer.invoke('sql-expert:save-config', config),
     loadConfig: () => ipcRenderer.invoke('sql-expert:load-config'),
-    selectBackendRoot: () => ipcRenderer.invoke('sql-expert:select-backend-root'),
-    clearBackendRoot: () => ipcRenderer.invoke('sql-expert:clear-backend-root'),
-    generatePrompt: (payload?: { forceRegenerate?: boolean; backendProjectRoot?: string }) =>
-      ipcRenderer.invoke('sql-expert:generate-prompt', payload),
     loadSchema: (dbConfig?: {
       host: string
       port: number
@@ -184,17 +181,19 @@ const api = {
       password: string
       database: string
     }) => ipcRenderer.invoke('sql-expert:load-schema', dbConfig),
+    loadMemories: (payload?: { database?: string; apiKey?: string }) =>
+      ipcRenderer.invoke('sql-expert:load-memories', payload),
     describeTable: (tableNames: string[]) =>
       ipcRenderer.invoke('sql-expert:describe-table', tableNames),
 
     // 流式进度事件监听
-    onAiContent: (callback: (content: string) => void) => {
-      ipcRenderer.on('sql-expert:ai-content', (_, content) => callback(content))
+    onAiContent: (callback: (data: { requestId: string; content: string }) => void) => {
+      ipcRenderer.on('sql-expert:ai-content', (_, data) => callback(data))
     },
-    onAiToolStart: (callback: (data: { id: string; name: string; args: Record<string, unknown> }) => void) => {
+    onAiToolStart: (callback: (data: { requestId: string; id: string; name: string; args: Record<string, unknown> }) => void) => {
       ipcRenderer.on('sql-expert:ai-tool-start', (_, data) => callback(data))
     },
-    onAiToolDone: (callback: (data: { id: string; name: string; args: Record<string, unknown>; status: string; result: Record<string, unknown>; errorMessage?: string }) => void) => {
+    onAiToolDone: (callback: (data: { requestId: string; id: string; name: string; args: Record<string, unknown>; status: string; result: Record<string, unknown>; errorMessage?: string }) => void) => {
       ipcRenderer.on('sql-expert:ai-tool-done', (_, data) => callback(data))
     },
     removeAiListeners: () => {

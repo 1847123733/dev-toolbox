@@ -2,11 +2,11 @@
  * SQL 专家服务
  * 主进程侧：数据库连接管理、AI 请求、SQL 校验、Schema 动态生成
  */
-import { ipcMain, app, dialog } from 'electron'
+import { ipcMain, app } from 'electron'
 import * as mysql from 'mysql2/promise'
-import { join, extname, relative } from 'path'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
-import { readdir, stat, readFile } from 'fs/promises'
+import { join } from 'path'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { createHash, randomUUID } from 'crypto'
 import OpenAI from 'openai'
 
 // ============ 类型定义 ============
@@ -28,11 +28,27 @@ interface AiConfig {
 interface SqlExpertConfig {
   db: DbConfig
   ai: AiConfig
-  backendProjectRoot: string
+}
+
+interface ToolCallRecord {
+  id: string
+  name: string
+  args: Record<string, unknown>
+  result?: Record<string, unknown>
+  status?: string
+  errorMessage?: string
+}
+
+interface AskAiMessage {
+  role: 'user' | 'assistant'
+  content: string
+  status?: 'done' | 'loading' | 'error' | 'stopped'
+  toolCalls?: ToolCallRecord[]
 }
 
 interface AskAiPayload {
-  messages: Array<{ role: string; content: string }>
+  requestId?: string
+  messages: AskAiMessage[]
   schema: string
   tools?: AiToolDefinition[]
   toolChoice?: string
@@ -53,10 +69,27 @@ interface ToolCall {
   function: { name: string; arguments: string }
 }
 
+interface MemoryEntry {
+  id: string
+  content: string
+  createdAt: string
+  updatedAt: string
+  source: 'tool' | 'manual'
+}
+
+interface AgentUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  promptCacheHitTokens: number
+  promptCacheMissTokens: number
+}
+
 // ============ 全局状态 ============
 
 let connectionPool: mysql.Pool | null = null
 let cachedSchema = ''
+const activeAiRequests = new Map<string, AbortController>()
 
 // ============ 配置持久化 ============
 
@@ -76,6 +109,33 @@ function getSchemaPath(): string {
   return join(getConfigDir(), 'schema.txt')
 }
 
+function getMemoriesDir(): string {
+  const dir = join(getConfigDir(), 'memories')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]+/g, '_').trim()
+}
+
+function buildApiKeyHash(apiKey: string): string {
+  return createHash('sha256').update(String(apiKey || '').trim()).digest('hex').slice(0, 24)
+}
+
+function buildMemoryScope(database: string, apiKey: string): string {
+  const db = sanitizeFileName(String(database || '').trim() || 'unknown_db')
+  const apiKeyHash = buildApiKeyHash(apiKey)
+  return `${db}__${apiKeyHash}`
+}
+
+function getMemoryFilePath(database: string, apiKey: string): string {
+  const scope = buildMemoryScope(database, apiKey)
+  return join(getMemoriesDir(), `${scope}.json`)
+}
+
 function loadConfigFromDisk(): SqlExpertConfig | null {
   const configPath = getConfigPath()
   if (!existsSync(configPath)) return null
@@ -84,8 +144,7 @@ function loadConfigFromDisk(): SqlExpertConfig | null {
     if (!parsed?.db || !parsed?.ai) return null
     return {
       db: parsed.db,
-      ai: parsed.ai,
-      backendProjectRoot: typeof parsed.backendProjectRoot === 'string' ? parsed.backendProjectRoot : ''
+      ai: parsed.ai
     }
   } catch {
     return null
@@ -110,76 +169,65 @@ function loadSchemaFromDisk(): string {
   }
 }
 
-function getPromptPath(): string {
-  return join(getConfigDir(), 'sql-prompt.md')
+function loadMemories(database: string, apiKey: string) {
+  const filePath = getMemoryFilePath(database, apiKey)
+  if (!existsSync(filePath)) {
+    writeFileSync(filePath, JSON.stringify([], null, 2), 'utf-8')
+    return {
+      memories: [] as MemoryEntry[],
+      memoryPath: filePath,
+      memoryScope: buildMemoryScope(database, apiKey)
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, 'utf-8'))
+    const list = Array.isArray(parsed) ? parsed : parsed?.memories
+    const memories = Array.isArray(list)
+      ? list
+          .filter(item => item && typeof item.content === 'string')
+          .map(item => ({
+            id: item.id || randomUUID(),
+            content: String(item.content),
+            createdAt: item.createdAt || new Date().toISOString(),
+            updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+            source: (item.source === 'tool' ? 'tool' : 'manual') as 'tool' | 'manual'
+          }))
+      : []
+
+    // 兼容手工编辑：统一写回标准结构，保证后续可直接增量追加。
+    writeFileSync(filePath, JSON.stringify(memories, null, 2), 'utf-8')
+
+    return {
+      memories,
+      memoryPath: filePath,
+      memoryScope: buildMemoryScope(database, apiKey)
+    }
+  } catch {
+    writeFileSync(filePath, JSON.stringify([], null, 2), 'utf-8')
+    return {
+      memories: [] as MemoryEntry[],
+      memoryPath: filePath,
+      memoryScope: buildMemoryScope(database, apiKey)
+    }
+  }
 }
 
-const PROMPT_SCAN_SKIP_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  'target',
-  '.idea',
-  '.vscode',
-  'logs',
-  'log',
-  'tmp',
-  'temp',
-  'coverage',
-  '.next',
-  '.nuxt'
-])
+function appendMemory(database: string, apiKey: string, content: string) {
+  const { memories, memoryPath } = loadMemories(database, apiKey)
+  const now = new Date().toISOString()
+  const entry: MemoryEntry = {
+    id: randomUUID(),
+    content,
+    createdAt: now,
+    updatedAt: now,
+    source: 'tool'
+  }
 
-const PROMPT_SCAN_TEXT_EXTENSIONS = new Set([
-  '.ts',
-  '.js',
-  '.tsx',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.java',
-  '.kt',
-  '.kts',
-  '.go',
-  '.py',
-  '.cs',
-  '.php',
-  '.rb',
-  '.xml',
-  '.sql',
-  '.yml',
-  '.yaml',
-  '.json',
-  '.properties',
-  '.md'
-])
-
-const PROMPT_SCAN_FILE_MAX_BYTES = 256 * 1024
-const PROMPT_SCAN_SUMMARY_MAX_LENGTH = 48_000
-const PROMPT_SCAN_MAX_FILES = 3_000
-
-const PROMPT_IMPORTANT_PATH_KEYWORDS = [
-  'repository',
-  'repo',
-  'service',
-  'mapper',
-  'controller',
-  'dao',
-  'query',
-  'sql',
-  'order',
-  'product',
-  'activity',
-  'store',
-  'goods',
-  'inventory'
-]
-
-const PROMPT_IMPORTANT_CONTENT_REGEX =
-  /(select\s+.+from|left\s+join|inner\s+join|where\s+|group\s+by|order\s+by|mapper|repository|service|controller|query|商品|订单|活动|门店|库存)/i
-
-const SQL_PROMPT_GENERATION_INSTRUCTION = `现在这个项目接入了 ai 查询，ai 可以直接访问数据库查询数据（ai 直接编写sql），这个项目是后端，请你扫描一下这个项目的逻辑，重点看主要的查询逻辑；然后编写一份文档，用于交给 ai 并附加在提示词中，重点提示 ai 某些特殊的查询逻辑，或是数据之间的关联关系、含义等，或者是你认为 ai 必须知道的一些事情。另外，ai 已经知道了数据库的全部表结构和数据，你不必额外写数据结构。你不需要关心 ai 如何实现的，只需要编写一个文档。你只需要关心主要的逻辑，如商品、订单、活动、门店等（不局限于我提到的这些），一些你认为较少使用的功能或本身就冷门的数据不需要查看。`
+  memories.push(entry)
+  writeFileSync(memoryPath, JSON.stringify(memories, null, 2), 'utf-8')
+  return { entry, memoryPath }
+}
 
 // ============ SQL 校验（复用 agentRuntime.ts 核心逻辑） ============
 
@@ -352,151 +400,8 @@ async function destroyPool(): Promise<void> {
   }
 }
 
-function loadPromptFromDisk(): string {
-  const promptPath = getPromptPath()
-  if (!existsSync(promptPath)) return ''
-  try {
-    return readFileSync(promptPath, 'utf-8')
-  } catch {
-    return ''
-  }
-}
-
-function isSkippableDirectory(dirname: string): boolean {
-  const normalized = dirname.trim().toLowerCase()
-  return PROMPT_SCAN_SKIP_DIRS.has(normalized)
-}
-
-function isTextCodeFile(filePath: string): boolean {
-  return PROMPT_SCAN_TEXT_EXTENSIONS.has(extname(filePath).toLowerCase())
-}
-
-function scorePath(relativePath: string): number {
-  const lower = relativePath.toLowerCase()
-  return PROMPT_IMPORTANT_PATH_KEYWORDS.reduce((score, keyword) => {
-    return lower.includes(keyword) ? score + 2 : score
-  }, 0)
-}
-
-function collectSnippetLines(content: string, maxLines = 10): string[] {
-  const lines = content.split(/\r?\n/)
-  const snippets: string[] = []
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    if (!PROMPT_IMPORTANT_CONTENT_REGEX.test(trimmed)) continue
-    snippets.push(trimmed.length > 180 ? `${trimmed.slice(0, 180)}...` : trimmed)
-    if (snippets.length >= maxLines) break
-  }
-  return snippets
-}
-
-async function buildBackendProjectSummary(rootPath: string): Promise<string> {
-  const queue = [rootPath]
-  let walkedFiles = 0
-  const candidates: Array<{ relativePath: string; score: number; snippets: string[] }> = []
-
-  while (queue.length && walkedFiles < PROMPT_SCAN_MAX_FILES) {
-    const current = queue.shift()
-    if (!current) break
-
-    let entries
-    try {
-      entries = await readdir(current, { withFileTypes: true })
-    } catch {
-      continue
-    }
-
-    for (const entry of entries) {
-      const fullPath = join(current, entry.name)
-      if (entry.isDirectory()) {
-        if (isSkippableDirectory(entry.name)) continue
-        queue.push(fullPath)
-        continue
-      }
-      if (!entry.isFile()) continue
-      if (!isTextCodeFile(fullPath)) continue
-      walkedFiles += 1
-
-      let fileStat
-      try {
-        fileStat = await stat(fullPath)
-      } catch {
-        continue
-      }
-      if (fileStat.size > PROMPT_SCAN_FILE_MAX_BYTES || fileStat.size <= 0) continue
-
-      const relPath = relative(rootPath, fullPath).replace(/\\/g, '/')
-      const pathScore = scorePath(relPath)
-
-      let content = ''
-      try {
-        content = await readFile(fullPath, 'utf-8')
-      } catch {
-        continue
-      }
-
-      const snippets = collectSnippetLines(content)
-      const contentScore = snippets.length * 2
-      const score = pathScore + contentScore
-      if (score <= 0) continue
-
-      candidates.push({ relativePath: relPath, score, snippets })
-    }
-  }
-
-  const picked = candidates
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 80)
-    .map((item, index) => {
-      const snippets = item.snippets.length ? item.snippets.map((line) => `- ${line}`).join('\n') : '- (无明显 SQL 相关片段)'
-      return `### ${index + 1}. ${item.relativePath}\n重要性分值: ${item.score}\n${snippets}`
-    })
-    .join('\n\n')
-
-  const summary = [
-    `项目根目录: ${rootPath}`,
-    `扫描文件总数(上限 ${PROMPT_SCAN_MAX_FILES}): ${walkedFiles}`,
-    `命中候选文件数: ${candidates.length}`,
-    '',
-    '以下是与查询逻辑可能最相关的代码摘要：',
-    picked || '- 未检出明显与查询逻辑相关的文件'
-  ].join('\n')
-
-  return summary.length > PROMPT_SCAN_SUMMARY_MAX_LENGTH
-    ? `${summary.slice(0, PROMPT_SCAN_SUMMARY_MAX_LENGTH)}\n\n(摘要已截断)`
-    : summary
-}
-
-async function generateSqlPromptByAi(aiConfig: AiConfig, backendProjectRoot: string): Promise<string> {
-  const projectSummary = await buildBackendProjectSummary(backendProjectRoot)
-  const payload = {
-    model: aiConfig.model,
-    temperature: 0.1,
-    messages: [
-      {
-        role: 'system',
-        content:
-          '你是一位资深后端架构与数据查询顾问。请基于给定项目摘要输出高质量 markdown 文档，内容简洁、准确、可直接用于 AI 查询提示词。'
-      },
-      {
-        role: 'user',
-        content: `${SQL_PROMPT_GENERATION_INSTRUCTION}\n\n---\n\n项目扫描摘要：\n${projectSummary}`
-      }
-    ]
-  } as any
-
-  const response = await callAiApi(aiConfig, payload)
-  const content = response.content.trim()
-  if (!content) throw new Error('AI 未生成有效的 sql-prompt 内容')
-  return content
-}
-
-function buildSystemPrompt(schema: string, prompt: string): string {
-  const promptSection = prompt.trim()
-    ? `\n### 查询建议\n${prompt.trim()}\n`
-    : ''
-
+function buildSystemPrompt(schema: string, memories: MemoryEntry[] = []): string {
+  const memoryPrompt = memories.map(memory => memory.content).join('\n\n')
   return `你是一个专业、严谨的企业数据查询助手，服务于本系统的真实业务用户。
 你只能通过工具访问数据库。query_database 工具最多返回 10 行样例；describe_table_schema 工具会返回完整字段清单。
 你的目标是在合法、合规、最小必要权限、以及结果可解释的前提下，高效帮助用户查询、聚合和分析数据。
@@ -511,7 +416,13 @@ function buildSystemPrompt(schema: string, prompt: string): string {
 4. SQL 只能使用只读查询语句：SELECT 或 WITH ... SELECT。
 5. 输出列必须使用 AS 指定清晰的别名，不允许 SELECT *。
 6. 若工具结果被截断，请在最终答复里明确说明，并判断是否建议用户缩小范围。
-7. 最终答复必须包含：结论、统计口径/筛选条件、是否截断。
+7. 当用户明确要求导出或下载时，必须调用 export_data 工具。
+8. 当用户明确要求图表展示时，必须调用 render_chart 工具。
+9. 当你确认了可复用经验时，可以调用 save_memory 工具保存为本地记忆。
+10. 最终答复必须包含：结论、统计口径/筛选条件、是否截断。
+
+### 历史记忆
+${memoryPrompt || '当前暂无已沉淀的可复用记忆。'}
 
 ### 绝对禁区
 1. 严禁生成 INSERT、UPDATE、DELETE、DROP、ALTER、TRUNCATE、CREATE、GRANT 等修改性语句。
@@ -522,7 +433,6 @@ function buildSystemPrompt(schema: string, prompt: string): string {
 \`\`\`text
 ${schema}
 \`\`\`
-${promptSection}
 `
 }
 
@@ -568,14 +478,149 @@ function getTools(): AiToolDefinition[] {
           anyOf: [{ required: ['tableName'] }, { required: ['tableNames'] }]
         }
       }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'render_chart',
+        description: '根据真实查询结果绘制图表。支持 line、bar、pie、line_bar',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['line', 'bar', 'pie', 'line_bar']
+            },
+            title: { type: 'string' },
+            xAxisData: { type: 'array', items: { type: 'string' } },
+            series: { type: 'array' },
+            reason: { type: 'string' }
+          },
+          required: ['type', 'title', 'series']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'save_memory',
+        description: '保存可复用经验到本地记忆文件',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            content: { type: 'string' },
+            reason: { type: 'string' }
+          },
+          required: ['content']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'export_data',
+        description: '执行只读 SQL 查询并导出完整结果为 CSV 文件',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            sql: { type: 'string' },
+            reason: { type: 'string' },
+            fileName: { type: 'string' }
+          },
+          required: ['sql']
+        }
+      }
     }
   ]
+}
+
+function stripToolMarkers(content: string): string {
+  return String(content || '').replace(/:::tool:[^:]+:::/g, '').trim()
+}
+
+function buildToolResultSummary(toolCall: ToolCallRecord): string {
+  if (toolCall.status === 'error' || toolCall.status === 'cancelled') {
+    return JSON.stringify({ ok: false, error: toolCall.errorMessage || '工具调用失败' })
+  }
+
+  if (!toolCall.result) {
+    return JSON.stringify({ ok: false, error: '未获取到结果' })
+  }
+
+  const summary: Record<string, unknown> = { ok: toolCall.result.ok }
+  if (toolCall.result.reason) summary.reason = toolCall.result.reason
+  if (typeof toolCall.result.totalRows === 'number') summary.totalRows = toolCall.result.totalRows
+  if (typeof toolCall.result.returnedRows === 'number') summary.returnedRows = toolCall.result.returnedRows
+  if (toolCall.result.truncated) summary.truncated = true
+  if (toolCall.result.error) summary.error = toolCall.result.error
+  if (toolCall.result.fileName) summary.fileName = toolCall.result.fileName
+  if (toolCall.result.chartConfig) summary.chartRendered = true
+  return JSON.stringify(summary)
+}
+
+function toModelMessages(uiMessages: AskAiMessage[]) {
+  const modelMessages: Array<{
+    role: string
+    content: string | null
+    tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>
+    tool_call_id?: string
+  }> = []
+
+  for (const message of uiMessages) {
+    if (message.status === 'loading' || message.status === 'error') continue
+
+    const cleanContent = stripToolMarkers(message.content)
+
+    if (message.role === 'user') {
+      if (cleanContent) {
+        modelMessages.push({ role: 'user', content: cleanContent })
+      }
+      continue
+    }
+
+    const toolCalls = (message.toolCalls || []).filter(tc => tc.id && tc.name)
+
+    if (toolCalls.length) {
+      modelMessages.push({
+        role: 'assistant',
+        content: cleanContent || null,
+        tool_calls: toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.args || {})
+          }
+        }))
+      })
+
+      for (const tc of toolCalls) {
+        modelMessages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: buildToolResultSummary(tc)
+        })
+      }
+
+      continue
+    }
+
+    if (cleanContent) {
+      modelMessages.push({ role: 'assistant', content: cleanContent })
+    }
+  }
+
+  return modelMessages
 }
 
 // ============ AI 请求（流式） ============
 
 interface StreamCallbacks {
   onContent?: (accumulatedContent: string) => void
+  signal?: AbortSignal
 }
 
 function upsertToolCall(toolCalls: ToolCall[], delta: any): void {
@@ -598,7 +643,7 @@ async function callAiApi(
   aiConfig: AiConfig,
   payload: any,
   callbacks: StreamCallbacks = {}
-): Promise<{ content: string; toolCalls?: ToolCall[] }> {
+): Promise<{ content: string; toolCalls?: ToolCall[]; usage?: AgentUsage }> {
   const openai = new OpenAI({
     apiKey: aiConfig.apiKey,
     baseURL: aiConfig.url
@@ -606,13 +651,17 @@ async function callAiApi(
 
   const request: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
     ...(payload as Omit<OpenAI.Chat.ChatCompletionCreateParamsStreaming, 'stream'>),
-    stream: true
+    stream: true,
+    stream_options: {
+      include_usage: true
+    }
   }
 
-  const stream = await openai.chat.completions.create(request)
+  const stream = await openai.chat.completions.create(request, { signal: callbacks.signal })
 
   let content = ''
   const toolCalls: ToolCall[] = []
+  let usage: AgentUsage | undefined
 
   for await (const chunk of stream) {
     const delta = (chunk as any).choices?.[0]?.delta
@@ -626,11 +675,32 @@ async function callAiApi(
     if (Array.isArray(delta.tool_calls)) {
       delta.tool_calls.forEach((tc: any) => upsertToolCall(toolCalls, tc))
     }
+
+    if ((chunk as any).usage) {
+      const chunkUsage = (chunk as any).usage
+      const promptTokens = Number(chunkUsage?.prompt_tokens || 0)
+      const completionTokens = Number(chunkUsage?.completion_tokens || 0)
+      const totalTokens = Number(chunkUsage?.total_tokens || promptTokens + completionTokens)
+      const promptCacheHitTokens = Number(
+        chunkUsage?.prompt_cache_hit_tokens || chunkUsage?.prompt_tokens_details?.cached_tokens || 0
+      )
+      const promptCacheMissTokens = Number(
+        chunkUsage?.prompt_cache_miss_tokens || Math.max(promptTokens - promptCacheHitTokens, 0)
+      )
+      usage = {
+        promptTokens,
+        completionTokens,
+        totalTokens,
+        promptCacheHitTokens,
+        promptCacheMissTokens
+      }
+    }
   }
 
   return {
     content,
-    toolCalls: toolCalls.length ? toolCalls : undefined
+    toolCalls: toolCalls.length ? toolCalls : undefined,
+    usage
   }
 }
 
@@ -638,6 +708,84 @@ async function callAiApi(
 
 const TOOL_RESULT_ROW_LIMIT = 10
 const SQL_QUERY_TIMEOUT_MS = 60_000
+
+function buildChartOption(args: Record<string, any>): Record<string, unknown> {
+  if (args.type === 'pie') {
+    return {
+      title: { text: args.title, left: 'center', top: 8 },
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      legend: { bottom: 0, type: 'scroll' },
+      series: (Array.isArray(args.series) ? args.series : []).map((s: any) => ({
+        name: s.name,
+        type: 'pie',
+        radius: ['35%', '65%'],
+        center: ['50%', '48%'],
+        data: s.data,
+        label: { formatter: '{b}\n{d}%' }
+      }))
+    }
+  }
+
+  const series = Array.isArray(args.series) ? args.series : []
+  const hasRightAxis = series.some((s: any) => s.yAxisIndex === 1)
+  const yAxis = hasRightAxis
+    ? [{ type: 'value' }, { type: 'value', splitLine: { show: false } }]
+    : [{ type: 'value' }]
+
+  return {
+    title: { text: args.title, left: 'center', top: 8 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    legend: { bottom: 0, type: 'scroll' },
+    grid: { top: 48, bottom: 60, left: 50, right: hasRightAxis ? 50 : 20, containLabel: true },
+    xAxis: { type: 'category', data: Array.isArray(args.xAxisData) ? args.xAxisData : [] },
+    yAxis,
+    series: series.map((s: any) => ({
+      name: s.name,
+      type: s.type,
+      data: s.data,
+      yAxisIndex: s.yAxisIndex || 0,
+      smooth: s.type === 'line',
+      barMaxWidth: 50
+    }))
+  }
+}
+
+function csvEscape(value: unknown) {
+  const str = value == null ? '' : String(value)
+  if (/[",\r\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+function rowsToCsv(rows: Array<Record<string, unknown>>) {
+  const columnSet = new Set<string>()
+  rows.forEach(row => {
+    Object.keys(row || {}).forEach(key => columnSet.add(key))
+  })
+  const columns = Array.from(columnSet)
+  const lines = [columns.map(csvEscape).join(',')]
+
+  rows.forEach(row => {
+    lines.push(columns.map(column => csvEscape(row?.[column])).join(','))
+  })
+
+  return lines.join('\r\n')
+}
+
+function buildExportFilePath(fileName?: string) {
+  const exportsDir = join(getConfigDir(), 'exports')
+  if (!existsSync(exportsDir)) {
+    mkdirSync(exportsDir, { recursive: true })
+  }
+
+  const normalized = sanitizeFileName((fileName || `AI导出_${new Date().toISOString().slice(0, 10)}`).trim())
+  const finalName = /\.csv$/i.test(normalized) ? normalized : `${normalized}.csv`
+  return {
+    fileName: finalName,
+    filePath: join(exportsDir, `${Date.now()}_${finalName}`)
+  }
+}
 
 async function queryWithTimeout(
   executor: mysql.Pool | mysql.Connection,
@@ -654,7 +802,8 @@ async function queryWithTimeout(
 async function dispatchToolCall(
   pool: mysql.Pool,
   toolCall: ToolCall,
-  schemaTableNames: Set<string>
+  schemaTableNames: Set<string>,
+  context: { database: string; apiKey: string }
 ): Promise<Record<string, unknown>> {
   const args = JSON.parse(toolCall.function.arguments || '{}')
 
@@ -712,6 +861,58 @@ async function dispatchToolCall(
     }
   }
 
+  if (toolCall.function.name === 'render_chart') {
+    const type = String(args.type || '')
+    const validTypes = ['line', 'bar', 'pie', 'line_bar']
+    if (!validTypes.includes(type)) {
+      throw new Error(`不支持的图表类型: ${type}`)
+    }
+    if (!Array.isArray(args.series) || args.series.length === 0) {
+      throw new Error('series 不能为空')
+    }
+    if (type !== 'pie' && (!Array.isArray(args.xAxisData) || args.xAxisData.length === 0)) {
+      throw new Error('折线图、柱状图、组合图必须提供 xAxisData')
+    }
+
+    return {
+      ok: true,
+      reason: args.reason || '按用户要求绘制图表',
+      chartConfig: buildChartOption(args)
+    }
+  }
+
+  if (toolCall.function.name === 'save_memory') {
+    const content = String(args.content || '').trim()
+    if (!content) {
+      throw new Error('记忆内容不能为空')
+    }
+    const memory = appendMemory(context.database, context.apiKey, content)
+    return {
+      ok: true,
+      reason: args.reason || '沉淀可复用经验',
+      memoryId: memory.entry.id,
+      memoryPath: memory.memoryPath,
+      rows: [{ id: memory.entry.id, content }]
+    }
+  }
+
+  if (toolCall.function.name === 'export_data') {
+    validateSql(args.sql)
+    const [rows] = (await queryWithTimeout(pool, args.sql)) as [Array<Record<string, unknown>>, unknown]
+    const exportFile = buildExportFilePath(typeof args.fileName === 'string' ? args.fileName : undefined)
+    writeFileSync(exportFile.filePath, rowsToCsv(rows), 'utf-8')
+
+    return {
+      ok: true,
+      reason: args.reason || '按用户要求导出数据',
+      truncated: false,
+      totalRows: rows.length,
+      returnedRows: rows.length,
+      fileName: exportFile.fileName,
+      filePath: exportFile.filePath
+    }
+  }
+
   return { ok: false, error: `未知工具: ${toolCall.function.name}` }
 }
 
@@ -758,11 +959,7 @@ export function setupSqlExpert(): void {
   // 保存配置
   ipcMain.handle('sql-expert:save-config', async (_event, config: SqlExpertConfig) => {
     try {
-      const normalized: SqlExpertConfig = {
-        ...config,
-        backendProjectRoot: typeof config.backendProjectRoot === 'string' ? config.backendProjectRoot : ''
-      }
-      saveConfigToDisk(normalized)
+      saveConfigToDisk(config)
       // 配置变更后重建连接池
       await destroyPool()
       return { success: true }
@@ -775,84 +972,49 @@ export function setupSqlExpert(): void {
   ipcMain.handle('sql-expert:load-config', async () => {
     const config = loadConfigFromDisk()
     const schema = loadSchemaFromDisk()
-    const prompt = loadPromptFromDisk()
+    const memoryState =
+      config?.db?.database && config?.ai?.apiKey
+        ? loadMemories(config.db.database, config.ai.apiKey)
+        : { memories: [] as MemoryEntry[], memoryPath: '', memoryScope: '' }
     return {
       config,
       schema,
       schemaPath: getSchemaPath(),
-      prompt,
-      promptPath: getPromptPath(),
-      backendProjectRoot: config?.backendProjectRoot || ''
+      memories: memoryState.memories,
+      memoryPath: memoryState.memoryPath,
+      memoryScope: memoryState.memoryScope,
+      memoryCount: memoryState.memories.length
     }
   })
 
-  // 选择后端项目根目录
-  ipcMain.handle('sql-expert:select-backend-root', async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: '选择后端项目根目录'
-    })
-    if (result.canceled || result.filePaths.length === 0) {
-      return { success: false }
-    }
-    const path = result.filePaths[0]
-    return { success: true, path }
-  })
-
-  // 清空后端项目根目录
-  ipcMain.handle('sql-expert:clear-backend-root', async () => {
+  ipcMain.handle('sql-expert:load-memories', async (_event, payload?: { database?: string; apiKey?: string }) => {
     try {
-      const config = loadConfigFromDisk()
-      if (!config) return { success: false, error: '请先保存 SQL 专家配置' }
-      saveConfigToDisk({ ...config, backendProjectRoot: '' })
-      return { success: true }
+      const saved = loadConfigFromDisk()
+      const database = payload?.database || saved?.db?.database || ''
+      const apiKey = payload?.apiKey || saved?.ai?.apiKey || ''
+      if (!database || !apiKey) {
+        throw new Error('缺少数据库名或 API Key，无法加载记忆')
+      }
+
+      const memoryState = loadMemories(database, apiKey)
+      return {
+        success: true,
+        memories: memoryState.memories,
+        memoryPath: memoryState.memoryPath,
+        memoryScope: memoryState.memoryScope,
+        memoryCount: memoryState.memories.length
+      }
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : '清空失败' }
-    }
-  })
-
-  // 生成 sql-prompt.md
-  ipcMain.handle(
-    'sql-expert:generate-prompt',
-    async (_event, payload?: { forceRegenerate?: boolean; backendProjectRoot?: string }) => {
-      try {
-        const config = loadConfigFromDisk()
-        if (!config || !config?.ai?.url || !config?.ai?.apiKey || !config?.ai?.model) {
-          throw new Error('请先在设置中完整配置 AI 参数')
-        }
-        const backendProjectRoot = (payload?.backendProjectRoot || config.backendProjectRoot || '').trim()
-        if (!backendProjectRoot) {
-          throw new Error('请先选择后端项目根目录')
-        }
-        if (!existsSync(backendProjectRoot)) {
-          throw new Error('后端项目根目录不存在，请重新选择')
-        }
-        if (backendProjectRoot !== config.backendProjectRoot) {
-          saveConfigToDisk({ ...config, backendProjectRoot })
-        }
-
-        const promptPath = getPromptPath()
-        if (payload?.forceRegenerate && existsSync(promptPath)) {
-          unlinkSync(promptPath)
-        }
-
-        const prompt = await generateSqlPromptByAi(config.ai, backendProjectRoot)
-        writeFileSync(promptPath, prompt, 'utf-8')
-
-        return {
-          success: true,
-          message: 'sql-prompt.md 生成成功',
-          prompt,
-          promptPath
-        }
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : '生成 sql-prompt.md 失败'
-        }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '加载记忆失败',
+        memories: [],
+        memoryPath: '',
+        memoryScope: '',
+        memoryCount: 0
       }
     }
-  )
+  })
 
   // 动态加载 Schema（从数据库 information_schema 查询）
   ipcMain.handle('sql-expert:load-schema', async (_event, dbConfig?: DbConfig) => {
@@ -884,16 +1046,21 @@ export function setupSqlExpert(): void {
 
       cachedSchema = schemaText
       saveSchemaToDisk(schemaText)
-
-      const prompt = loadPromptFromDisk()
+      const savedConfig = loadConfigFromDisk()
+      const memoryState =
+        config.database && savedConfig?.ai?.apiKey
+          ? loadMemories(config.database, savedConfig.ai.apiKey)
+          : { memories: [] as MemoryEntry[], memoryPath: '', memoryScope: '' }
 
       return {
         success: true,
         schema: schemaText,
         tableCount: rows.length,
         schemaPath: getSchemaPath(),
-        prompt,
-        promptPath: getPromptPath()
+        memories: memoryState.memories,
+        memoryPath: memoryState.memoryPath,
+        memoryScope: memoryState.memoryScope,
+        memoryCount: memoryState.memories.length
       }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : '加载表结构失败' }
@@ -959,9 +1126,25 @@ export function setupSqlExpert(): void {
     }
   })
 
+  ipcMain.handle('sql-expert:cancel-ask-ai', async (_event, payload: { requestId: string }) => {
+    const requestId = String(payload?.requestId || '')
+    const controller = activeAiRequests.get(requestId)
+    if (!controller) {
+      return { success: false, message: '当前没有可取消的请求' }
+    }
+
+    controller.abort()
+    activeAiRequests.delete(requestId)
+    return { success: true, message: '已停止生成' }
+  })
+
   // AI 对话（支持多轮工具调用，流式推送进度）
   ipcMain.handle('sql-expert:ask-ai', async (event, payload: AskAiPayload) => {
     const sender = event.sender
+    const requestId = String(payload?.requestId || randomUUID())
+    const abortController = new AbortController()
+    activeAiRequests.set(requestId, abortController)
+
     try {
       const savedConfig = loadConfigFromDisk()
       if (!savedConfig?.ai?.url || !savedConfig?.ai?.apiKey) {
@@ -971,20 +1154,27 @@ export function setupSqlExpert(): void {
       const schema = payload.schema || cachedSchema || loadSchemaFromDisk()
       if (!schema) throw new Error('请先加载数据库表结构')
 
+      const memoryState = loadMemories(savedConfig.db.database, savedConfig.ai.apiKey)
       const schemaTableNames = getSchemaTableNames(schema)
       const pool = await ensurePool()
-      const messages = [...payload.messages]
-      const prompt = loadPromptFromDisk()
-      const systemMessage = { role: 'system', content: buildSystemPrompt(schema, prompt) }
+      const messages = toModelMessages(payload.messages || [])
+      const systemMessage = { role: 'system', content: buildSystemPrompt(schema, memoryState.memories) }
       const allMessages: Array<{
         role: string
-        content: string
+        content: string | null
         tool_calls?: ToolCall[]
         tool_call_id?: string
       }> = [systemMessage, ...messages]
 
       const MAX_ROUNDS = 15
       let finalReply = ''
+      let usage: AgentUsage = {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        promptCacheHitTokens: 0,
+        promptCacheMissTokens: 0
+      }
       const toolCallResults: Array<{
         id: string
         name: string
@@ -1003,6 +1193,17 @@ export function setupSqlExpert(): void {
       }
 
       for (let round = 0; round < MAX_ROUNDS; round++) {
+        if (abortController.signal.aborted) {
+          return {
+            success: true,
+            requestId,
+            reply: finalReply,
+            toolCalls: toolCallResults,
+            usage,
+            status: 'stopped'
+          }
+        }
+
         const finalPayload = {
           model: savedConfig.ai.model,
           temperature: 0.1,
@@ -1012,13 +1213,20 @@ export function setupSqlExpert(): void {
         } as any
 
         const aiResponse = await callAiApi(savedConfig.ai, finalPayload, {
+          signal: abortController.signal,
           onContent: (accContent) => {
             // 实时推送 AI 回复内容给渲染进程
             if (!sender.isDestroyed()) {
-              sender.send('sql-expert:ai-content', mergeReply(finalReply, accContent))
+              sender.send('sql-expert:ai-content', {
+                requestId,
+                content: mergeReply(finalReply, accContent)
+              })
             }
           }
         })
+        if (aiResponse.usage) {
+          usage = aiResponse.usage
+        }
 
         if (aiResponse.content) {
           finalReply = mergeReply(finalReply, aiResponse.content)
@@ -1027,8 +1235,11 @@ export function setupSqlExpert(): void {
         if (!aiResponse.toolCalls?.length) {
           return {
             success: true,
+            requestId,
             reply: finalReply || '未生成有效回复',
-            toolCalls: toolCallResults
+            toolCalls: toolCallResults,
+            usage,
+            status: 'done'
           }
         }
 
@@ -1043,7 +1254,10 @@ export function setupSqlExpert(): void {
         for (const toolCall of aiResponse.toolCalls) {
           finalReply = mergeReply(finalReply, `:::tool:${toolCall.id}:::`)
           if (!sender.isDestroyed()) {
-            sender.send('sql-expert:ai-content', finalReply)
+            sender.send('sql-expert:ai-content', {
+              requestId,
+              content: finalReply
+            })
           }
 
           let toolResult: Record<string, unknown>
@@ -1073,6 +1287,7 @@ export function setupSqlExpert(): void {
           // 通知渲染进程：工具调用开始
           if (!sender.isDestroyed()) {
             sender.send('sql-expert:ai-tool-start', {
+              requestId,
               id: toolCall.id,
               name: toolCall.function.name,
               args: parsedArgs
@@ -1080,7 +1295,10 @@ export function setupSqlExpert(): void {
           }
 
           try {
-            toolResult = await dispatchToolCall(pool, toolCall, schemaTableNames)
+            toolResult = await dispatchToolCall(pool, toolCall, schemaTableNames, {
+              database: savedConfig.db.database,
+              apiKey: savedConfig.ai.apiKey
+            })
             callRecord.status = (toolResult.ok as boolean) ? 'success' : 'error'
             callRecord.result = { ...toolResult, rows: undefined }
           } catch (error) {
@@ -1093,6 +1311,7 @@ export function setupSqlExpert(): void {
           // 通知渲染进程：工具调用完成
           if (!sender.isDestroyed()) {
             sender.send('sql-expert:ai-tool-done', {
+              requestId,
               id: toolCall.id,
               name: toolCall.function.name,
               args: parsedArgs,
@@ -1112,11 +1331,33 @@ export function setupSqlExpert(): void {
 
       return {
         success: true,
+        requestId,
         reply: '本轮查询已达到工具调用上限。请进一步明确筛选条件、缩小时间范围，或分步骤提问。',
-        toolCalls: toolCallResults
+        toolCalls: toolCallResults,
+        usage,
+        status: 'done'
       }
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'AI 请求失败' }
+      if (abortController.signal.aborted) {
+        return {
+          success: true,
+          requestId,
+          reply: '',
+          toolCalls: [],
+          usage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            promptCacheHitTokens: 0,
+            promptCacheMissTokens: 0
+          },
+          status: 'stopped'
+        }
+      }
+
+      return { success: false, requestId, error: error instanceof Error ? error.message : 'AI 请求失败' }
+    } finally {
+      activeAiRequests.delete(requestId)
     }
   })
 }

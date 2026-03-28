@@ -105,10 +105,37 @@
                       <div v-if="segment.toolCall.result">
                         <div class="tool-detail-label" style="margin-top: 8px">执行结果：</div>
                         <div v-if="segment.toolCall.result.ok" class="tool-result-success">
-                          成功 (共 {{ segment.toolCall.result.totalRows }} 条{{ segment.toolCall.result.truncated ? '，展示前 10 行' : '' }})
+                          <template v-if="segment.toolCall.name === 'export_data'">
+                            导出成功（共 {{ segment.toolCall.result.totalRows }} 条）
+                          </template>
+                          <template v-else-if="segment.toolCall.name === 'render_chart'">
+                            图表配置已生成
+                          </template>
+                          <template v-else-if="segment.toolCall.name === 'save_memory'">
+                            记忆已保存（ID: {{ segment.toolCall.result.memoryId }}）
+                          </template>
+                          <template v-else>
+                            成功 (共 {{ segment.toolCall.result.totalRows }} 条{{ segment.toolCall.result.truncated ? '，展示前 10 行' : '' }})
+                          </template>
                         </div>
                         <div v-else class="tool-result-error">
                           失败: {{ segment.toolCall.result.error }}
+                        </div>
+                        <div
+                          v-if="segment.toolCall.name === 'export_data' && segment.toolCall.result.filePath"
+                          class="tool-detail-row"
+                          style="margin-top: 8px;"
+                        >
+                          <span class="tool-detail-label">导出文件：</span>{{ segment.toolCall.result.filePath }}
+                          <button class="btn btn-outline" style="margin-left: 8px; padding: 4px 10px;" @click="openExportedFile(segment.toolCall.result)">
+                            打开
+                          </button>
+                        </div>
+                        <div
+                          v-if="segment.toolCall.name === 'render_chart' && getChartConfig(segment.toolCall)"
+                          style="margin-top: 8px; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px; background: var(--color-surface-light);"
+                        >
+                          <ChartRenderer :config="getChartConfig(segment.toolCall)!" :height="320" />
                         </div>
                       </div>
                       <div v-if="segment.toolCall.errorMessage && !segment.toolCall.result" class="tool-result-error">
@@ -139,6 +166,9 @@
 
       <!-- 底部输入框 -->
       <div class="main-input-area">
+        <div v-if="usage.totalTokens > 0" class="input-disclaimer" style="margin-bottom: 8px;">
+          {{ usageText }}
+        </div>
         <div class="input-box" :class="{ focused: inputFocused }">
           <textarea
             ref="textareaRef"
@@ -152,6 +182,14 @@
             @input="autoResize"
           />
           <div class="input-toolbar">
+            <button
+              v-if="isSending"
+              class="btn btn-outline"
+              style="padding: 6px 12px; margin-right: 8px;"
+              @click="onStopMessage"
+            >
+              停止
+            </button>
             <button
               class="send-btn"
               :class="{ active: canSend }"
@@ -240,46 +278,28 @@
           <div v-if="schemaStatus" class="schema-status" :class="schemaStatus.success ? 'success' : 'error'">
             {{ schemaStatus.message }}
           </div>
-          <div style="margin-top: 12px;">
+          <div v-if="schema" class="schema-preview">
             <div class="schema-preview-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span>后端项目根目录</span>
+              <span>当前表清单 ({{ schemaTableCount }} 张表)</span>
+              <span style="font-size: 11px; opacity: 0.7; user-select: text;" title="此文件保存路径">{{ schemaPath }}</span>
             </div>
-            <div class="form-actions-row" style="margin-bottom: 8px;">
-              <button class="btn btn-outline" @click="onSelectBackendRoot">选择后端项目文件夹</button>
-              <button class="btn btn-outline" @click="onClearBackendRoot" :disabled="!backendProjectRoot">清空</button>
-            </div>
-            <div class="schema-preview-content" style="max-height: 66px;">{{ backendProjectRoot || '未选择' }}</div>
-            <button
-              class="btn btn-primary btn-full"
-              style="margin-top: 10px;"
-              @click="onGeneratePrompt"
-              :disabled="promptGenerating || !backendProjectRoot"
-            >
-              {{ promptGenerating ? '生成中...' : '生成 sql-prompt.md（可重新加载）' }}
-            </button>
-            <div
-              v-if="promptGenerateStatus"
-              class="schema-status"
-              :class="promptGenerateStatus.success ? 'success' : 'error'"
-              style="margin-top: 8px;"
-            >
-              {{ promptGenerateStatus.message }}
-            </div>
+            <pre class="schema-preview-content">{{ schemaPreview }}</pre>
           </div>
-          <div v-if="schema || prompt" class="schema-preview" style="gap: 16px; display: flex; flex-direction: column;">
-            <div v-if="schema">
-              <div class="schema-preview-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span>当前表清单 ({{ schemaTableCount }} 张表)</span>
-                <span style="font-size: 11px; opacity: 0.7; user-select: text;" title="此文件保存路径">{{ schemaPath }}</span>
-              </div>
-              <pre class="schema-preview-content">{{ schemaPreview }}</pre>
+          <div v-if="schema" class="schema-preview" style="margin-top: 10px;">
+            <div class="schema-preview-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>当前记忆 ({{ memories.length }} 条)</span>
+              <button class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;" @click="refreshLocalMemories">
+                刷新
+              </button>
             </div>
-            <div v-if="prompt">
-              <div class="schema-preview-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span>AI Prompt (指导词)</span>
-                <span style="font-size: 11px; opacity: 0.7; user-select: text;" title="此文件保存路径：可手动修改自定义">{{ promptPath }}</span>
+            <div class="schema-preview-header" style="margin-bottom: 8px; opacity: 0.75; word-break: break-all;">文件: {{ memoryPath || '-' }}</div>
+            <div class="schema-preview-content" style="max-height: 240px;">
+              <div style="margin-bottom: 8px; opacity: 0.75;">scope: {{ memoryScope || '-' }}</div>
+              <div v-if="memories.length === 0">暂无本地记忆，可直接编辑该文件追加内容。</div>
+              <div v-for="memory in memories" :key="memory.id" style="margin-bottom: 10px; border-top: 1px dashed var(--color-border); padding-top: 8px;">
+                <div style="opacity: 0.65; margin-bottom: 4px;">{{ memory.id }} | {{ memory.source }}</div>
+                <!-- <div style="white-space: pre-wrap;">{{ memory.content }}</div> -->
               </div>
-              <pre class="schema-preview-content" style="max-height: 200px;">{{ prompt }}</pre>
             </div>
           </div>
         </div>
@@ -300,6 +320,7 @@ import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import DOMPurify from 'dompurify'
 import { useSqlExpertChat } from './useSqlExpertChat'
+import ChartRenderer from './ChartRenderer.vue'
 
 // ============ Markdown 渲染 ============
 
@@ -362,17 +383,15 @@ const {
   isSending,
   schema,
   schemaPath,
-  prompt,
-  promptPath,
-  backendProjectRoot,
+  memories,
+  memoryPath,
+  memoryScope,
+  usage,
   schemaLoading,
-  promptGenerating,
-  promptGenerateStatus,
   loadSchema,
-  selectBackendRoot,
-  clearBackendRoot,
-  generatePrompt,
+  refreshMemories,
   sendMessage,
+  stopMessage,
   regenerateMessage,
   selectChat,
   startNewChat,
@@ -406,6 +425,14 @@ const schemaPreview = computed(() => {
   const lines = schema.value.split(/\r?\n/).filter(l => l.trim())
   if (lines.length <= 20) return lines.join('\n')
   return lines.slice(0, 20).join('\n') + `\n... 还有 ${lines.length - 20} 张表`
+})
+
+const usageText = computed(() => {
+  const total = usage.value.totalTokens || 0
+  const completion = usage.value.completionTokens || 0
+  const hit = usage.value.promptCacheHitTokens || 0
+  const miss = usage.value.promptCacheMissTokens || 0
+  return `累计 ${total} tokens（输出 ${completion}，缓存命中 ${hit}，未命中 ${miss}）`
 })
 
 // ============ 事件处理 ============
@@ -450,10 +477,35 @@ const getToolTableNames = (args?: Record<string, unknown>) => {
   return typeof args?.tableName === 'string' ? args.tableName : ''
 }
 
+const getChartConfig = (toolCall?: { result?: Record<string, unknown> }) => {
+  const config = toolCall?.result?.chartConfig
+  return config && typeof config === 'object' ? (config as Record<string, unknown>) : null
+}
+
 const copyText = async (text: string) => {
   try {
     await navigator.clipboard.writeText(stripToolMarkers(text))
   } catch { /* ignore */ }
+}
+
+const openExportedFile = async (result?: Record<string, unknown>) => {
+  const filePath = typeof result?.filePath === 'string' ? result.filePath : ''
+  if (!filePath) return
+  await window.api.app.openFile(filePath)
+}
+
+const refreshLocalMemories = async () => {
+  const result = await refreshMemories({
+    database: dbForm.value.database,
+    apiKey: aiForm.value.apiKey
+  })
+  if (!result.success) {
+    schemaStatus.value = { success: false, message: result.error || '刷新记忆失败' }
+  }
+}
+
+const onStopMessage = async () => {
+  await stopMessage()
 }
 
 const onDeleteChat = (id: string) => {
@@ -500,30 +552,21 @@ const onLoadSchema = async () => {
     database: dbForm.value.database
   })
   if (result.success) {
+    await refreshMemories({
+      database: dbForm.value.database,
+      apiKey: aiForm.value.apiKey
+    })
     schemaStatus.value = { success: true, message: `加载成功，共 ${result.tableCount} 张表` }
   } else {
     schemaStatus.value = { success: false, message: result.error || '加载失败' }
   }
 }
 
-const onSelectBackendRoot = async () => {
-  await selectBackendRoot()
-}
-
-const onClearBackendRoot = async () => {
-  await clearBackendRoot()
-}
-
-const onGeneratePrompt = async () => {
-  await generatePrompt({ forceRegenerate: true })
-}
-
 const saveSettings = async () => {
   try {
     await window.api.sqlExpert.saveConfig({
       db: { ...dbForm.value },
-      ai: { ...aiForm.value },
-      backendProjectRoot: backendProjectRoot.value || ''
+      ai: { ...aiForm.value }
     })
     showSettings.value = false
   } catch (e) {
@@ -543,7 +586,6 @@ onMounted(async () => {
       if (ai) {
         aiForm.value = { ...aiForm.value, ...ai }
       }
-      backendProjectRoot.value = result.config.backendProjectRoot || result.backendProjectRoot || ''
     }
   } catch (e) {
     console.warn('加载配置失败', e)
@@ -760,7 +802,7 @@ watch(
 .main-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 32px 120px;
+  padding: 24px 32px 200px;
 }
 
 .message-wrapper {

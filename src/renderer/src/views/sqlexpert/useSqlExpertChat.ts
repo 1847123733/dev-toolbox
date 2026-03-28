@@ -9,7 +9,7 @@ import dayjs from 'dayjs'
 // ============ 类型定义 ============
 
 type ChatRole = 'user' | 'assistant'
-type ChatStatus = 'done' | 'loading' | 'error'
+type ChatStatus = 'done' | 'loading' | 'error' | 'stopped'
 
 export interface ChatMessage {
   id: string
@@ -56,7 +56,10 @@ const STORAGE_KEY = 'sql-expert-chat-sessions'
 
 const TOOL_DISPLAY_NAME_MAP: Record<string, string> = {
   query_database: '查询数据库',
-  describe_table_schema: '查询表结构'
+  describe_table_schema: '查询表结构',
+  render_chart: '绘制图表',
+  export_data: '导出数据',
+  save_memory: '保存记忆'
 }
 
 // ============ 辅助函数 ============
@@ -148,6 +151,14 @@ function buildToolNotice(toolName: string): string {
   return `【已调用${displayName}工具】`
 }
 
+function toPlainObject<T>(value: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T
+  } catch {
+    return value
+  }
+}
+
 
 // ============ Composable ============
 
@@ -160,12 +171,18 @@ export function useSqlExpertChat() {
   const isSending = ref(false)
   const schema = ref('')
   const schemaPath = ref('')
-  const prompt = ref('')
-  const promptPath = ref('')
-  const backendProjectRoot = ref('')
   const schemaLoading = ref(false)
-  const promptGenerating = ref(false)
-  const promptGenerateStatus = ref<{ success: boolean; message: string } | null>(null)
+  const memories = ref<Array<{ id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' }>>([])
+  const memoryPath = ref('')
+  const memoryScope = ref('')
+  const currentRequestId = ref('')
+  const usage = ref({
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    promptCacheHitTokens: 0,
+    promptCacheMissTokens: 0
+  })
 
   const activeSession = computed(() =>
     sessions.value.find(s => s.id === activeChatId.value) || null
@@ -223,9 +240,9 @@ export function useSqlExpertChat() {
       const result = await window.api.sqlExpert.loadConfig()
       schema.value = result.schema || ''
       schemaPath.value = result.schemaPath || ''
-      prompt.value = result.prompt || ''
-      promptPath.value = result.promptPath || ''
-      backendProjectRoot.value = result.backendProjectRoot || result.config?.backendProjectRoot || ''
+      memories.value = Array.isArray(result.memories) ? result.memories : []
+      memoryPath.value = result.memoryPath || ''
+      memoryScope.value = result.memoryScope || ''
     } catch (e) {
       console.warn('加载配置失败', e)
     }
@@ -239,8 +256,9 @@ export function useSqlExpertChat() {
       if (result.success) {
         schema.value = result.schema || ''
         schemaPath.value = result.schemaPath || ''
-        prompt.value = result.prompt || ''
-        promptPath.value = result.promptPath || ''
+        memories.value = Array.isArray(result.memories) ? result.memories : []
+        memoryPath.value = result.memoryPath || ''
+        memoryScope.value = result.memoryScope || ''
         return { success: true, tableCount: result.tableCount }
       }
       return { success: false, error: result.error || '加载失败' }
@@ -251,50 +269,21 @@ export function useSqlExpertChat() {
     }
   }
 
-  const selectBackendRoot = async () => {
-    const result = await window.api.sqlExpert.selectBackendRoot()
-    if (result.success && result.path) {
-      backendProjectRoot.value = result.path
-    }
-    return result
-  }
-
-  const clearBackendRoot = async () => {
-    const result = await window.api.sqlExpert.clearBackendRoot()
+  const refreshMemories = async (payload?: { database?: string; apiKey?: string }) => {
+    const result = await window.api.sqlExpert.loadMemories(payload)
     if (result.success) {
-      backendProjectRoot.value = ''
+      memories.value = result.memories || []
+      memoryPath.value = result.memoryPath || ''
+      memoryScope.value = result.memoryScope || ''
     }
     return result
-  }
-
-  const generatePrompt = async (payload?: { forceRegenerate?: boolean }) => {
-    promptGenerating.value = true
-    promptGenerateStatus.value = null
-    try {
-      const result = await window.api.sqlExpert.generatePrompt({
-        ...payload,
-        backendProjectRoot: backendProjectRoot.value || ''
-      })
-      if (result.success) {
-        prompt.value = result.prompt || ''
-        promptPath.value = result.promptPath || ''
-        promptGenerateStatus.value = { success: true, message: result.message || 'sql-prompt.md 生成成功' }
-      } else {
-        promptGenerateStatus.value = { success: false, message: result.error || '生成失败' }
-      }
-      return result
-    } catch (e) {
-      const message = e instanceof Error ? e.message : '生成失败'
-      promptGenerateStatus.value = { success: false, message }
-      return { success: false, error: message }
-    } finally {
-      promptGenerating.value = false
-    }
   }
 
   // AI 对话（流式进度）
   const runAssistantReply = async (session: ChatSession) => {
     const targetSession = resolveSession(session)
+    const requestId = createId()
+    currentRequestId.value = requestId
     const loadingMessage = createMessage('assistant', '', {
       status: 'loading',
       thinking: '正在思考...',
@@ -307,14 +296,20 @@ export function useSqlExpertChat() {
     // 注册流式事件监听，实时更新 loading 消息
     const activeToolCalls: ToolCallItem[] = []
 
-    window.api.sqlExpert.onAiContent((content: string) => {
+    window.api.sqlExpert.onAiContent((data: { requestId: string; content: string }) => {
+      if (data.requestId !== requestId) {
+        return
+      }
       replaceSessionMessage(targetSession, loadingMessage.id, msg => ({
         ...msg,
-        content
+        content: data.content
       }))
     })
 
-    window.api.sqlExpert.onAiToolStart((data: { id: string; name: string; args: Record<string, unknown> }) => {
+    window.api.sqlExpert.onAiToolStart((data: { requestId: string; id: string; name: string; args: Record<string, unknown> }) => {
+      if (data.requestId !== requestId) {
+        return
+      }
       activeToolCalls.push({
         id: data.id,
         name: data.name,
@@ -327,7 +322,10 @@ export function useSqlExpertChat() {
       }))
     })
 
-    window.api.sqlExpert.onAiToolDone((data: { id: string; status: string; result: Record<string, unknown>; errorMessage?: string }) => {
+    window.api.sqlExpert.onAiToolDone((data: { requestId: string; id: string; status: string; result: Record<string, unknown>; errorMessage?: string }) => {
+      if (data.requestId !== requestId) {
+        return
+      }
       const target = activeToolCalls.find(tc => tc.id === data.id)
       if (target) {
         target.status = data.status
@@ -345,15 +343,44 @@ export function useSqlExpertChat() {
         .filter(m => m.id !== loadingMessage.id)
         .filter(m => m.status !== 'loading' && m.status !== 'error')
         .filter(m => m.content.trim())
-        .map(m => ({ role: m.role, content: m.content }))
+        .map(m => ({
+          role: m.role,
+          content: m.content,
+          status: m.status,
+          toolCalls: Array.isArray(m.toolCalls)
+            ? m.toolCalls.map(tc => ({
+                id: tc.id,
+                name: tc.name,
+                status: tc.status,
+                errorMessage: tc.errorMessage,
+                args: toPlainObject(tc.args || {}),
+                result: toPlainObject(tc.result || {})
+              }))
+            : []
+        }))
 
       const result = await window.api.sqlExpert.askAi({
+        requestId,
         messages: conversationMessages,
         schema: schema.value
       })
 
       if (!result.success) {
         throw new Error(result.error || 'AI 请求失败')
+      }
+
+      usage.value = result.usage || usage.value
+
+      if (result.status === 'stopped') {
+        replaceSessionMessage(targetSession, loadingMessage.id, msg => ({
+          ...msg,
+          content: msg.content || '已停止生成',
+          thinking: '',
+          showThinking: false,
+          status: 'stopped',
+          toolCalls: msg.toolCalls
+        }))
+        return
       }
 
       replaceSessionMessage(targetSession, loadingMessage.id, msg => ({
@@ -384,9 +411,21 @@ export function useSqlExpertChat() {
     } finally {
       // 清理 IPC 事件监听
       window.api.sqlExpert.removeAiListeners()
+      if (currentRequestId.value === requestId) {
+        currentRequestId.value = ''
+      }
       updateSessionTimestamp(targetSession)
       isSending.value = false
     }
+  }
+
+  const stopMessage = async () => {
+    if (!isSending.value || !currentRequestId.value) {
+      return false
+    }
+
+    const result = await window.api.sqlExpert.cancelAskAi({ requestId: currentRequestId.value })
+    return Boolean(result.success)
   }
 
   const sendMessage = async () => {
@@ -450,17 +489,15 @@ export function useSqlExpertChat() {
     isSending,
     schema,
     schemaPath,
-    prompt,
-    promptPath,
-    backendProjectRoot,
+    memories,
+    memoryPath,
+    memoryScope,
+    usage,
     schemaLoading,
-    promptGenerating,
-    promptGenerateStatus,
     loadSchema,
-    selectBackendRoot,
-    clearBackendRoot,
-    generatePrompt,
+    refreshMemories,
     sendMessage,
+    stopMessage,
     regenerateMessage,
     selectChat,
     startNewChat,
