@@ -427,12 +427,35 @@ const schemaPreview = computed(() => {
   return lines.slice(0, 20).join('\n') + `\n... 还有 ${lines.length - 20} 张表`
 })
 
+const tokenPricing = {
+  promptCacheHitPerMillion: 0.2,
+  promptCacheMissPerMillion: 2,
+  completionPerMillion: 3
+}
+
+const estimatedCost = computed(() => {
+  const promptCacheHitCost =
+    ((usage.value.promptCacheHitTokens || 0) / 1_000_000) * tokenPricing.promptCacheHitPerMillion
+  const promptCacheMissCost =
+    ((usage.value.promptCacheMissTokens || 0) / 1_000_000) * tokenPricing.promptCacheMissPerMillion
+  const completionCost =
+    ((usage.value.completionTokens || 0) / 1_000_000) * tokenPricing.completionPerMillion
+
+  return promptCacheHitCost + promptCacheMissCost + completionCost
+})
+
+const formatCurrency = (value: number) => {
+  if (value >= 1) return `¥${value.toFixed(2)}`
+  if (value >= 0.01) return `¥${value.toFixed(4)}`
+  return `¥${value.toFixed(6)}`
+}
+
 const usageText = computed(() => {
   const total = usage.value.totalTokens || 0
   const completion = usage.value.completionTokens || 0
   const hit = usage.value.promptCacheHitTokens || 0
   const miss = usage.value.promptCacheMissTokens || 0
-  return `累计 ${total} tokens（输出 ${completion}，缓存命中 ${hit}，未命中 ${miss}）`
+  return `累计 ${total} tokens（输出 ${completion}，缓存命中 ${hit}，未命中 ${miss}） | 估计费用 ${formatCurrency(estimatedCost.value)}`
 })
 
 // ============ 事件处理 ============
