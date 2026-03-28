@@ -14,7 +14,7 @@ const tools = [
   { id: 'dock', name: 'macOS Dock', icon: 'dock' },
   { id: 'oss', name: 'OSS管理', icon: 'cloud' },
   { id: 'httpclient', name: 'HTTP请求', icon: 'send' },
-  { id: 'sqlexpert', name: 'SQL专家', icon: 'database' }
+  { id: 'sqlexpert', name: '分析专家', icon: 'database' }
 ]
 
 const toolComponents: Record<string, Component> = {

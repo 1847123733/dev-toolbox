@@ -1,5 +1,5 @@
 /**
- * SQL 专家会话管理 composable
+ * 企业级分析专家会话管理 composable
  * 适配自 lancheng_dailyB2B_admin 的 useAiAgentChat.ts
  * 核心改动：通过 IPC (window.api.sqlExpert) 调用主进程服务
  */
@@ -349,13 +349,13 @@ export function useSqlExpertChat() {
           status: m.status,
           toolCalls: Array.isArray(m.toolCalls)
             ? m.toolCalls.map(tc => ({
-                id: tc.id,
-                name: tc.name,
-                status: tc.status,
-                errorMessage: tc.errorMessage,
-                args: toPlainObject(tc.args || {}),
-                result: toPlainObject(tc.result || {})
-              }))
+              id: tc.id,
+              name: tc.name,
+              status: tc.status,
+              errorMessage: tc.errorMessage,
+              args: toPlainObject(tc.args || {}),
+              result: toPlainObject(tc.result || {})
+            }))
             : []
         }))
 

@@ -153,7 +153,7 @@ const api = {
     }
   },
 
-  // SQL 专家
+  // 企业级分析专家
   sqlExpert: {
     testDb: (config: {
       host: string
@@ -185,6 +185,8 @@ const api = {
       ipcRenderer.invoke('sql-expert:load-memories', payload),
     describeTable: (tableNames: string[]) =>
       ipcRenderer.invoke('sql-expert:describe-table', tableNames),
+    checkBalance: (config?: { url?: string; apiKey?: string }) =>
+      ipcRenderer.invoke('sql-expert:check-balance', config),
 
     // 流式进度事件监听
     onAiContent: (callback: (data: { requestId: string; content: string }) => void) => {

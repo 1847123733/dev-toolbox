@@ -1,5 +1,5 @@
 /**
- * SQL 专家服务
+ * 企业级分析专家服务
  * 主进程侧：数据库连接管理、AI 请求、SQL 校验、Schema 动态生成
  */
 import { ipcMain, app } from 'electron'
@@ -185,14 +185,14 @@ function loadMemories(database: string, apiKey: string) {
     const list = Array.isArray(parsed) ? parsed : parsed?.memories
     const memories = Array.isArray(list)
       ? list
-          .filter(item => item && typeof item.content === 'string')
-          .map(item => ({
-            id: item.id || randomUUID(),
-            content: String(item.content),
-            createdAt: item.createdAt || new Date().toISOString(),
-            updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
-            source: (item.source === 'tool' ? 'tool' : 'manual') as 'tool' | 'manual'
-          }))
+        .filter(item => item && typeof item.content === 'string')
+        .map(item => ({
+          id: item.id || randomUUID(),
+          content: String(item.content),
+          createdAt: item.createdAt || new Date().toISOString(),
+          updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+          source: (item.source === 'tool' ? 'tool' : 'manual') as 'tool' | 'manual'
+        }))
       : []
 
     // 兼容手工编辑：统一写回标准结构，保证后续可直接增量追加。
@@ -965,6 +965,60 @@ export function setupSqlExpert(): void {
       return { success: true }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : '保存失败' }
+    }
+  })
+
+  // 查询余额
+  ipcMain.handle('sql-expert:check-balance', async (_event, config?: { url?: string; apiKey?: string }) => {
+    try {
+      const savedConfig = loadConfigFromDisk()
+      const url = config?.url || savedConfig?.ai?.url || 'https://api.deepseek.com/v1'
+      const apiKey = config?.apiKey || savedConfig?.ai?.apiKey || ''
+
+      if (!apiKey) {
+        return { success: false, message: 'API Key 不能为空' }
+      }
+
+      const base = url.replace(/\/v1\/?$/, '')
+      const apiUrl = `${base}/user/balance`
+
+      const res = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        }
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        let errMsg = `HTTP ${res.status}`
+        try {
+          const errorData = JSON.parse(errorText)
+          errMsg = errorData.error?.message || errorData.message || errMsg
+        } catch {
+          // ignore
+        }
+        throw new Error(errMsg)
+      }
+
+      const data = await res.json()
+      if (data.is_available !== undefined) {
+        const isAvailable = data.is_available
+        const infoList = data.balance_infos || []
+        let balanceInfo = ''
+        if (infoList.length > 0) {
+          balanceInfo = infoList.map((info: any) => `${info.total_balance} ${info.currency}`).join(', ')
+        }
+        return { 
+          success: true, 
+          message: `余额: ${balanceInfo || '未知'} ${isAvailable ? '(可用)' : '(欠费/受限)'}`
+        }
+      } else {
+        return { success: true, message: '请求成功，但不包含余额信息' }
+      }
+    } catch (error) {
+       return { success: false, message: `查询失败: ${error instanceof Error ? error.message : String(error)}` }
     }
   })
 

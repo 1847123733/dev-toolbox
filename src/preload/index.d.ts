@@ -241,7 +241,7 @@ interface HttpClientAPI {
   send: (payload: HttpClientRequestPayload) => Promise<HttpClientResponse>
 }
 
-// ============ SQL 专家相关类型 ============
+// ============ 企业级分析专家相关类型 ============
 
 interface SqlExpertDbConfig {
   host: string
@@ -335,6 +335,10 @@ interface SqlExpertAPI {
     success: boolean
     rows?: Array<Record<string, unknown>>
     error?: string
+  }>
+  checkBalance: (config?: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    message: string
   }>
   // 流式进度事件监听
   onAiContent: (callback: (data: { requestId: string; content: string }) => void) => void
