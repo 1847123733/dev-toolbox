@@ -1,4 +1,4 @@
-export {}
+export { }
 
 interface NpmPackage {
   name: string
@@ -170,6 +170,7 @@ interface AppAPI {
 }
 
 interface SqlExpertAPI {
+  checkBalance: (payload: { url: string; apiKey: string }) => Promise<{ success: boolean; message: string }>
   testDb: (config: {
     host: string; port: number; user: string; password: string; database: string
   }) => Promise<{ success: boolean; message: string }>
