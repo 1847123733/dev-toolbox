@@ -183,6 +183,12 @@ const api = {
     }) => ipcRenderer.invoke('sql-expert:load-schema', dbConfig),
     loadMemories: (payload?: { database?: string; apiKey?: string }) =>
       ipcRenderer.invoke('sql-expert:load-memories', payload),
+    updateMemory: (payload: { memoryId: string; content: string; database?: string; apiKey?: string }) =>
+      ipcRenderer.invoke('sql-expert:update-memory', payload),
+    deleteMemory: (payload: { memoryId: string; database?: string; apiKey?: string }) =>
+      ipcRenderer.invoke('sql-expert:delete-memory', payload),
+    addMemory: (payload: { content: string; database?: string; apiKey?: string }) =>
+      ipcRenderer.invoke('sql-expert:add-memory', payload),
     describeTable: (tableNames: string[]) =>
       ipcRenderer.invoke('sql-expert:describe-table', tableNames),
     checkBalance: (config?: { url?: string; apiKey?: string }) =>

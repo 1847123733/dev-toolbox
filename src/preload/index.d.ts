@@ -331,6 +331,30 @@ interface SqlExpertAPI {
     memoryCount: number
     error?: string
   }>
+  updateMemory: (payload: { memoryId: string; content: string; database?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    memories: Array<{ id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' }>
+    memoryPath?: string
+    memoryScope?: string
+    memoryCount?: number
+    error?: string
+  }>
+  deleteMemory: (payload: { memoryId: string; database?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    memories: Array<{ id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' }>
+    memoryPath?: string
+    memoryScope?: string
+    memoryCount?: number
+    error?: string
+  }>
+  addMemory: (payload: { content: string; database?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    memories: Array<{ id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' }>
+    memoryPath?: string
+    memoryScope?: string
+    memoryCount?: number
+    error?: string
+  }>
   describeTable: (tableNames: string[]) => Promise<{
     success: boolean
     rows?: Array<Record<string, unknown>>

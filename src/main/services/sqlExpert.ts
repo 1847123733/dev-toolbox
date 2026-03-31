@@ -229,6 +229,40 @@ function appendMemory(database: string, apiKey: string, content: string) {
   return { entry, memoryPath }
 }
 
+function updateMemory(database: string, apiKey: string, memoryId: string, content: string) {
+  const { memories, memoryPath } = loadMemories(database, apiKey)
+  const target = memories.find(m => m.id === memoryId)
+  if (!target) throw new Error(`未找到 ID 为 ${memoryId} 的记忆`)
+  target.content = content
+  target.updatedAt = new Date().toISOString()
+  writeFileSync(memoryPath, JSON.stringify(memories, null, 2), 'utf-8')
+  return { entry: target, memoryPath }
+}
+
+function deleteMemory(database: string, apiKey: string, memoryId: string) {
+  const { memories, memoryPath } = loadMemories(database, apiKey)
+  const index = memories.findIndex(m => m.id === memoryId)
+  if (index < 0) throw new Error(`未找到 ID 为 ${memoryId} 的记忆`)
+  memories.splice(index, 1)
+  writeFileSync(memoryPath, JSON.stringify(memories, null, 2), 'utf-8')
+  return { memoryPath }
+}
+
+function addMemoryManual(database: string, apiKey: string, content: string) {
+  const { memories, memoryPath } = loadMemories(database, apiKey)
+  const now = new Date().toISOString()
+  const entry: MemoryEntry = {
+    id: randomUUID(),
+    content,
+    createdAt: now,
+    updatedAt: now,
+    source: 'manual'
+  }
+  memories.push(entry)
+  writeFileSync(memoryPath, JSON.stringify(memories, null, 2), 'utf-8')
+  return { entry, memoryPath }
+}
+
 // ============ SQL 校验（复用 agentRuntime.ts 核心逻辑） ============
 
 function extractSelectClause(sql: string): string {
@@ -1067,6 +1101,57 @@ export function setupSqlExpert(): void {
         memoryScope: '',
         memoryCount: 0
       }
+    }
+  })
+
+  // 更新单条记忆
+  ipcMain.handle('sql-expert:update-memory', async (_event, payload: { memoryId: string; content: string; database?: string; apiKey?: string }) => {
+    try {
+      const saved = loadConfigFromDisk()
+      const database = payload.database || saved?.db?.database || ''
+      const apiKey = payload.apiKey || saved?.ai?.apiKey || ''
+      if (!database || !apiKey) throw new Error('缺少数据库名或 API Key')
+      if (!payload.memoryId || !payload.content?.trim()) throw new Error('记忆 ID 和内容不能为空')
+
+      updateMemory(database, apiKey, payload.memoryId, payload.content.trim())
+      const memoryState = loadMemories(database, apiKey)
+      return { success: true, memories: memoryState.memories, memoryPath: memoryState.memoryPath, memoryScope: memoryState.memoryScope, memoryCount: memoryState.memories.length }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '更新记忆失败', memories: [] }
+    }
+  })
+
+  // 删除单条记忆
+  ipcMain.handle('sql-expert:delete-memory', async (_event, payload: { memoryId: string; database?: string; apiKey?: string }) => {
+    try {
+      const saved = loadConfigFromDisk()
+      const database = payload.database || saved?.db?.database || ''
+      const apiKey = payload.apiKey || saved?.ai?.apiKey || ''
+      if (!database || !apiKey) throw new Error('缺少数据库名或 API Key')
+      if (!payload.memoryId) throw new Error('记忆 ID 不能为空')
+
+      deleteMemory(database, apiKey, payload.memoryId)
+      const memoryState = loadMemories(database, apiKey)
+      return { success: true, memories: memoryState.memories, memoryPath: memoryState.memoryPath, memoryScope: memoryState.memoryScope, memoryCount: memoryState.memories.length }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '删除记忆失败', memories: [] }
+    }
+  })
+
+  // 手动新增记忆
+  ipcMain.handle('sql-expert:add-memory', async (_event, payload: { content: string; database?: string; apiKey?: string }) => {
+    try {
+      const saved = loadConfigFromDisk()
+      const database = payload.database || saved?.db?.database || ''
+      const apiKey = payload.apiKey || saved?.ai?.apiKey || ''
+      if (!database || !apiKey) throw new Error('缺少数据库名或 API Key')
+      if (!payload.content?.trim()) throw new Error('内容不能为空')
+
+      addMemoryManual(database, apiKey, payload.content.trim())
+      const memoryState = loadMemories(database, apiKey)
+      return { success: true, memories: memoryState.memories, memoryPath: memoryState.memoryPath, memoryScope: memoryState.memoryScope, memoryCount: memoryState.memories.length }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '新增记忆失败', memories: [] }
     }
   })
 

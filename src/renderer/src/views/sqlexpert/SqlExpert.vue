@@ -297,17 +297,30 @@
           <div v-if="schema" class="schema-preview" style="margin-top: 10px;">
             <div class="schema-preview-header" style="display: flex; justify-content: space-between; align-items: center;">
               <span>当前记忆 ({{ memories.length }} 条)</span>
-              <button class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;" @click="refreshLocalMemories">
-                刷新
-              </button>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;" @click="openAddMemoryModal">
+                  + 新增
+                </button>
+                <button class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;" @click="refreshLocalMemories">
+                  刷新
+                </button>
+              </div>
             </div>
             <div class="schema-preview-header" style="margin-bottom: 8px; opacity: 0.75; word-break: break-all;">文件: {{ memoryPath || '-' }}</div>
             <div class="schema-preview-content" style="max-height: 240px;">
-              <div style="margin-bottom: 8px; opacity: 0.75;">scope: {{ memoryScope || '-' }}</div>
-              <div v-if="memories.length === 0">暂无本地记忆，可直接编辑该文件追加内容。</div>
-              <div v-for="memory in memories" :key="memory.id" style="margin-bottom: 10px; border-top: 1px dashed var(--color-border); padding-top: 8px;">
-                <div style="opacity: 0.65; margin-bottom: 4px;">{{ memory.id }} | {{ memory.source }}</div>
-                <!-- <div style="white-space: pre-wrap;">{{ memory.content }}</div> -->
+              <!-- <div style="margin-bottom: 8px; opacity: 0.75;">scope: {{ memoryScope || '-' }}</div> -->
+              <div v-if="memories.length === 0">暂无本地记忆，可点击 "+ 新增" 添加。</div>
+              <div
+                v-for="memory in memories"
+                :key="memory.id"
+                class="memory-item"
+                @click="openMemoryDetail(memory)"
+              >
+                <div class="memory-item-header">
+                  <span class="memory-item-id">{{ memory.id.slice(0, 8) }}...</span>
+                  <span class="memory-item-source" :class="memory.source">{{ memory.source === 'tool' ? 'AI' : '手动' }}</span>
+                </div>
+                <!-- <div class="memory-item-preview">{{ memory.content.slice(0, 80) }}{{ memory.content.length > 80 ? '...' : '' }}</div> -->
               </div>
             </div>
           </div>
@@ -340,6 +353,77 @@
                 </svg>下载
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 记忆详情/编辑弹窗 -->
+    <div v-if="showMemoryDetailModal" class="modal-overlay" @click.self="showMemoryDetailModal = false">
+      <div class="modal-content memory-detail-modal">
+        <div class="modal-header">
+          <h3>🧠 记忆详情</h3>
+          <button class="modal-close" @click="showMemoryDetailModal = false">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+          <div class="memory-meta">
+            <span>ID: {{ memoryDetailData?.id }}</span>
+            <span class="memory-item-source" :class="memoryDetailData?.source">{{ memoryDetailData?.source === 'tool' ? 'AI 创建' : '手动创建' }}</span>
+          </div>
+          <div class="memory-meta" style="margin-top: 6px;">
+            <span>创建: {{ formatTime(memoryDetailData?.createdAt) }}</span>
+            <span>更新: {{ formatTime(memoryDetailData?.updatedAt) }}</span>
+          </div>
+          <textarea
+            v-model="memoryEditContent"
+            class="memory-edit-textarea"
+            rows="10"
+            placeholder="记忆内容..."
+          />
+          <div v-if="memorySaveStatus" class="memory-save-status" :class="memorySaveStatus.success ? 'success' : 'error'">
+            {{ memorySaveStatus.message }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline memory-danger-btn" @click="onDeleteMemory" :disabled="memorySaving">
+            删除
+          </button>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-outline" @click="showMemoryDetailModal = false">取消</button>
+            <button class="btn btn-primary" @click="onSaveMemory" :disabled="memorySaving || !memoryEditContent.trim()">
+              {{ memorySaving ? '保存中...' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新增记忆弹窗 -->
+    <div v-if="showAddMemoryModal" class="modal-overlay" @click.self="showAddMemoryModal = false">
+      <div class="modal-content memory-detail-modal">
+        <div class="modal-header">
+          <h3>➕ 新增记忆</h3>
+          <button class="modal-close" @click="showAddMemoryModal = false">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+          <p class="section-desc" style="margin-top: 0;">输入可复用的经验或知识，将保存为手动记忆。</p>
+          <textarea
+            v-model="newMemoryContent"
+            class="memory-edit-textarea"
+            rows="10"
+            placeholder="例如：daily_saler_plan 表的 plan_date 字段存储格式为 yyyy-MM-dd，查询时需注意..."
+          />
+          <div v-if="memorySaveStatus" class="memory-save-status" :class="memorySaveStatus.success ? 'success' : 'error'">
+            {{ memorySaveStatus.message }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div></div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-outline" @click="showAddMemoryModal = false">取消</button>
+            <button class="btn btn-primary" @click="onAddMemory" :disabled="memorySaving || !newMemoryContent.trim()">
+              {{ memorySaving ? '保存中...' : '新增' }}
+            </button>
           </div>
         </div>
       </div>
@@ -419,7 +503,7 @@ const {
   schemaPath,
   memories,
   memoryPath,
-  memoryScope,
+  // memoryScope,
   usage,
   schemaLoading,
   loadSchema,
@@ -441,6 +525,15 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const expandedTools = ref<Set<string>>(new Set())
 
 const showSessionFilesModal = ref(false)
+
+// 记忆管理弹窗状态
+const showMemoryDetailModal = ref(false)
+const showAddMemoryModal = ref(false)
+const memoryDetailData = ref<{ id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' } | null>(null)
+const memoryEditContent = ref('')
+const newMemoryContent = ref('')
+const memorySaving = ref(false)
+const memorySaveStatus = ref<{ success: boolean; message: string } | null>(null)
 
 const sessionFiles = computed(() => {
   const files: { name: string, path: string, desc: string, result: any }[] = []
@@ -628,6 +721,101 @@ const refreshLocalMemories = async () => {
   })
   if (!result.success) {
     schemaStatus.value = { success: false, message: result.error || '刷新记忆失败' }
+  }
+}
+
+const formatTime = (iso?: string) => {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+const openMemoryDetail = (memory: { id: string; content: string; createdAt: string; updatedAt: string; source: 'tool' | 'manual' }) => {
+  memoryDetailData.value = { ...memory }
+  memoryEditContent.value = memory.content
+  memorySaveStatus.value = null
+  showMemoryDetailModal.value = true
+}
+
+const openAddMemoryModal = () => {
+  newMemoryContent.value = ''
+  memorySaveStatus.value = null
+  showAddMemoryModal.value = true
+}
+
+const onSaveMemory = async () => {
+  if (!memoryDetailData.value || !memoryEditContent.value.trim() || memorySaving.value) return
+  memorySaving.value = true
+  memorySaveStatus.value = null
+  try {
+    const result = await window.api.sqlExpert.updateMemory({
+      memoryId: memoryDetailData.value.id,
+      content: memoryEditContent.value.trim(),
+      database: dbForm.value.database,
+      apiKey: aiForm.value.apiKey
+    })
+    if (result.success) {
+      memories.value = result.memories
+      memorySaveStatus.value = { success: true, message: '保存成功' }
+      const updated = result.memories.find(m => m.id === memoryDetailData.value?.id)
+      if (updated) memoryDetailData.value = { ...updated }
+    } else {
+      memorySaveStatus.value = { success: false, message: result.error || '保存失败' }
+    }
+  } catch (err: any) {
+    memorySaveStatus.value = { success: false, message: err.message || '保存失败' }
+  } finally {
+    memorySaving.value = false
+  }
+}
+
+const onDeleteMemory = async () => {
+  if (!memoryDetailData.value || memorySaving.value) return
+  if (!confirm('确定要删除此条记忆？删除后不可恢复。')) return
+  memorySaving.value = true
+  memorySaveStatus.value = null
+  try {
+    const result = await window.api.sqlExpert.deleteMemory({
+      memoryId: memoryDetailData.value.id,
+      database: dbForm.value.database,
+      apiKey: aiForm.value.apiKey
+    })
+    if (result.success) {
+      memories.value = result.memories
+      showMemoryDetailModal.value = false
+    } else {
+      memorySaveStatus.value = { success: false, message: result.error || '删除失败' }
+    }
+  } catch (err: any) {
+    memorySaveStatus.value = { success: false, message: err.message || '删除失败' }
+  } finally {
+    memorySaving.value = false
+  }
+}
+
+const onAddMemory = async () => {
+  if (!newMemoryContent.value.trim() || memorySaving.value) return
+  memorySaving.value = true
+  memorySaveStatus.value = null
+  try {
+    const result = await window.api.sqlExpert.addMemory({
+      content: newMemoryContent.value.trim(),
+      database: dbForm.value.database,
+      apiKey: aiForm.value.apiKey
+    })
+    if (result.success) {
+      memories.value = result.memories
+      memorySaveStatus.value = { success: true, message: '新增成功' }
+      setTimeout(() => {
+        showAddMemoryModal.value = false
+      }, 600)
+    } else {
+      memorySaveStatus.value = { success: false, message: result.error || '新增失败' }
+    }
+  } catch (err: any) {
+    memorySaveStatus.value = { success: false, message: err.message || '新增失败' }
+  } finally {
+    memorySaving.value = false
   }
 }
 
@@ -891,4 +1079,26 @@ watch(
 .sfi-name { font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 6px; }
 .sfi-desc { font-size: 12.5px; color: var(--color-text-muted); line-height: 1.5; }
 .sfi-btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; flex-shrink: 0; margin-left: 16px; white-space: nowrap; pointer-events: none; }
+
+/* 记忆管理 */
+.memory-item { margin-bottom: 0; border-top: 1px dashed var(--color-border); padding: 10px 0; cursor: pointer; transition: all 0.2s ease; border-radius: 6px; }
+.memory-item:hover { background: rgba(99, 102, 241, 0.06); padding-left: 8px; padding-right: 8px; }
+.memory-item-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.memory-item-id { font-size: 11px; opacity: 0.5; font-family: 'SF Mono', 'Cascadia Code', monospace; }
+.memory-item-source { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.memory-item-source.tool { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+.memory-item-source.manual { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.memory-item-preview { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; word-break: break-all; }
+
+.memory-detail-modal { width: 580px; }
+.memory-meta { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--color-text-muted); gap: 12px; }
+.memory-edit-textarea { width: 100%; margin-top: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-light); color: var(--color-text); font-size: 13.5px; line-height: 1.7; resize: vertical; outline: none; font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace; transition: border-color 0.2s ease; min-height: 160px; }
+.memory-edit-textarea:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12); }
+.memory-edit-textarea::placeholder { color: var(--color-text-muted); opacity: 0.5; }
+.memory-save-status { margin-top: 10px; font-size: 13px; font-weight: 500; text-align: center; padding: 6px 12px; border-radius: 8px; animation: fadeIn 0.3s; }
+.memory-save-status.success { color: #10b981; background: rgba(16, 185, 129, 0.08); }
+.memory-save-status.error { color: #ef4444; background: rgba(239, 68, 68, 0.08); }
+.modal-footer { padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); background: var(--color-surface); border-radius: 0 0 16px 16px; }
+.memory-danger-btn { color: #ef4444 !important; border-color: rgba(239, 68, 68, 0.3) !important; }
+.memory-danger-btn:hover:not(:disabled) { background: rgba(239, 68, 68, 0.08) !important; border-color: #ef4444 !important; color: #ef4444 !important; }
 </style>
