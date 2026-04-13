@@ -1,394 +1,352 @@
-# 开发者工具箱 - 项目开发文档
+# 开发者工具箱（Dev Toolbox）开发文档
 
-> 本文档供 AI 或开发者继续开发时参考，详细记录了项目架构、功能模块和扩展指南。
-
----
-
-## 📁 项目结构
-
-```
-unitMap/
-├── src/
-│   ├── main/                          # Electron 主进程
-│   │   ├── index.ts                   # 主进程入口，窗口创建、IPC 通信
-│   │   └── services/                  # 主进程服务
-│   │       ├── codeRunner.ts          # 代码运行服务（JS/TS 执行）
-│   │       ├── npmManager.ts          # NPM 包管理服务
-│   │       └── domainLookup.ts        # 域名查询服务
-│   │
-│   ├── preload/                       # 预加载脚本
-│   │   ├── index.ts                   # 暴露安全 API 给渲染进程
-│   │   └── index.d.ts                 # API 类型定义
-│   │
-│   └── renderer/                      # Vue 渲染进程
-│       ├── index.html                 # HTML 入口
-│       └── src/
-│           ├── main.ts                # Vue 应用入口
-│           ├── App.vue                # 根组件
-│           ├── styles/
-│           │   └── index.css          # 全局样式（TailwindCSS + DaisyUI）
-│           ├── components/            # 通用组件
-│           │   ├── TitleBar.vue       # 自定义标题栏
-│           │   └── Sidebar.vue        # 左侧工具栏
-│           └── views/
-│               ├── runjs/             # RunJS 模块
-│               │   ├── RunJS.vue      # RunJS 主视图
-│               │   └── components/
-│               │       ├── CodeEditor.vue   # Monaco Editor 封装
-│               │       ├── NpmPanel.vue     # NPM 包管理面板
-│               │       ├── FilePanel.vue    # 文件管理面板
-│               │       └── OutputPanel.vue  # 代码输出面板
-│               └── domainlookup/      # 域名查询模块
-│                   └── DomainLookup.vue # 域名查询主视图
-│
-├── resources/                         # 应用资源（图标等）
-├── electron.vite.config.ts            # electron-vite 配置
-├── tsconfig.json                      # TypeScript 配置
-└── package.json                       # 项目配置
-```
+> 面向两类读者：
+> 1) 新同学快速上手（安装、运行、调试）
+> 2) 持续维护与扩展（架构、IPC、模块边界、发布）
 
 ---
 
-## 🔧 技术栈
+## 1. 项目定位
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Electron | 35.x | 桌面应用框架 |
-| Vue 3 | 3.5.x | 前端框架 |
-| TypeScript | 5.8.x | 类型安全 |
-| electron-vite | 3.x | 构建工具 |
-| TailwindCSS | 4.x | CSS 框架 |
-| DaisyUI | 5.x | UI 组件库 |
-| Monaco Editor | 0.52.x | 代码编辑器 |
-| esbuild | 0.24.x | TypeScript 编译 |
+`dev-toolbox` 是一个基于 `Electron + Vue 3 + TypeScript` 的桌面开发工具集合，当前包含：
 
----
-
-## 🎯 已实现功能
-
-### 1. 应用框架
-
-- [x] **无边框窗口** - 自定义标题栏，支持拖动
-- [x] **窗口控制** - 最小化、最大化/还原、关闭
-- [x] **单实例锁** - 只允许运行一个实例
-- [x] **左侧工具栏** - 可扩展的工具选择面板
-
-### 2. RunJS 模块
-
-- [x] **代码编辑器**
-  - Monaco Editor 集成
-  - 自定义暗色主题
-  - 文件标签页管理
-  - JavaScript/TypeScript 切换
-  - **代码自动补全** - 内置代码片段和 NPM 包提示
-  - **快捷键支持** - `Ctrl+Enter` 运行，`Ctrl+S` 保存，`Esc` 停止，`Ctrl+D` 复制行
-  - **Express 支持** - 内置 Express 类型定义与自动补全
-  - **TypeScript 类型支持** - ES5/ES6/ESNext 完整类型推断
-  - **动态类型加载** - 从本地 NPM 包读取 `.d.ts` 类型定义，支持版本切换同步
-  - **智能提示** - 数组、字符串、对象方法自动补全
-
-- [x] **NPM 包管理**
-  - **真实安装** - 包会被完整下载并解压到用户数据目录
-  - **版本管理** - 支持查看历史版本并一键切换
-  - **自动持久化** - 依赖关系自动保存到 package.json
-  - **国内镜像** - 内置 npmmirror 源加速
-
-- [x] **代码运行**
-  - JavaScript 直接执行
-  - TypeScript 通过 esbuild 编译后执行
-  - **异步支持** - 完美支持 async/await 和 Promise 等待
-  - **实时日志** - console.log/error 实时流式传输到 UI
-  - **ESM 兼容** - 自动处理 ESM 模块默认导出
-  - **常驻服务** - 支持 Express/Koa/Http Server 运行
-  - **资源清理** - 自动追踪并关闭未释放的 Server 端口
-  - **端口终止** - 手动终止指定端口的 Electron 进程（使用 netstat + taskkill）
-  - 沙箱隔离（使用 Node.js vm 模块）
-  - 运行中断功能
-
-- [x] **文件管理**
-  - [x] 多标签页编辑
-  - [x] 自动持久化保存（LocalStorage）
-  - [x] 真实文件列表
-  - [x] 新建/关闭/切换文件
-
-### 3. 域名查询模块
-
-- [x] **DNS 解析**
-  - 获取域名的 IPv4/IPv6 地址
-  - 支持复制 IP 地址
-
-- [x] **IP 地理位置**
-  - 查询国家、城市、运营商信息
-  - 使用 ip-api.com 免费服务
-
-- [x] **技术栈识别**
-  - 分析 HTTP 响应头
-  - 识别服务器软件（nginx, Apache）
-  - 识别后端框架（Express, PHP, ASP.NET）
-  - 识别 CDN（Cloudflare, Vercel, 阿里云, 腾讯云）
-
-### 4. macOS Dock 模块
-
-- [x] **Dock 窗口**
-  - 独立的透明窗口，始终置顶
-  - 支持底部/左侧/右侧位置
-  - 鼠标悬停放大效果
-  - 自动隐藏功能
-
-- [x] **动态应用管理**
-  - 添加/删除 Dock 应用
-  - 拖拽排序应用
-  - 预设应用（访达、终端、浏览器、设置）
-  - 自定义应用（打开网址或本地程序）
-  - 分隔线管理
-  - 配置自动保存到本地
+- RunJS（JS/TS 运行与调试）
+- NPM 包管理与类型支持
+- 域名/IP 查询与端口扫描
+- HTTP 请求调试
+- OSS 上传管理
+- SQL Expert（MySQL + AI 分析）
+- macOS Dock 风格悬浮工具栏
+- 应用级能力（自动更新、托盘、代理、开机自启、关闭行为）
 
 ---
 
-## 🚀 如何添加新工具
+## 2. 快速上手（新同学必读）
 
-### 步骤 1：在 Sidebar 注册工具
+### 2.1 环境要求
 
-编辑 `src/renderer/src/App.vue`：
+- Node.js 18+
+- npm 9+
+- Windows/macOS/Linux 任一（本仓库以 Windows 开发体验为主）
 
-```typescript
-const tools = [
-  { id: 'runjs', name: 'RunJS', icon: 'code' },
-  { id: 'newtool', name: '新工具', icon: 'wrench' }  // 添加新工具
-]
-```
-
-### 步骤 2：创建工具视图
-
-创建 `src/renderer/src/views/newtool/NewTool.vue`：
-
-```vue
-<script setup lang="ts">
-// 工具逻辑
-</script>
-
-<template>
-  <div class="newtool-container">
-    <!-- 工具 UI -->
-  </div>
-</template>
-```
-
-### 步骤 3：在 App.vue 中引入
-
-```vue
-<script setup lang="ts">
-import NewTool from './views/newtool/NewTool.vue'
-</script>
-
-<template>
-  <main class="flex-1 overflow-hidden">
-    <Transition name="fade" mode="out-in">
-      <RunJS v-if="activeTool === 'runjs'" />
-      <NewTool v-else-if="activeTool === 'newtool'" />
-    </Transition>
-  </main>
-</template>
-```
-
-### 步骤 4：添加图标（可选）
-
-编辑 `src/renderer/src/components/Sidebar.vue` 中的 `getIcon` 函数：
-
-```typescript
-const icons: Record<string, string> = {
-  code: `<path ... />`,
-  wrench: `<path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />`
-}
-```
-
----
-
-## 📡 IPC 通信
-
-### 主进程 → 渲染进程
-
-| 事件名 | 描述 |
-|--------|------|
-| `window:maximized-change` | 窗口最大化状态变化 |
-
-### 渲染进程 → 主进程
-
-| 事件名 | 类型 | 描述 |
-|--------|------|------|
-| `window:minimize` | send | 最小化窗口 |
-| `window:maximize` | send | 最大化/还原窗口 |
-| `window:close` | send | 关闭窗口 |
-| `window:isMaximized` | invoke | 获取最大化状态 |
-| `code:run` | invoke | 运行代码 |
-| `code:stop` | send | 停止运行 |
-| `code:clean` | invoke | 清理所有活跃的 Server |
-| `code:killPort` | invoke | 终止占用指定端口的 Electron 进程 |
-| `npm:search` | invoke | 搜索 NPM 包 |
-| `npm:install` | invoke | 安装 NPM 包 |
-| `npm:uninstall` | invoke | 卸载 NPM 包 |
-| `npm:list` | invoke | 获取已安装包列表 |
-| `npm:versions` | invoke | 获取包的所有版本 |
-| `npm:changeVersion` | invoke | 切换包版本 |
-| `domain:lookup` | invoke | 查询域名信息（IP、位置、技术栈） |
-| `code:log` | on | (主->渲) 实时日志流 |
-
----
-
-## 🎨 UI 设计规范
-
-### 颜色变量
-
-```css
---color-primary: #6366f1;       /* 主色调 - 靛蓝 */
---color-secondary: #8b5cf6;     /* 次要色 - 紫色 */
---color-surface: #1e1e2e;       /* 背景色 */
---color-surface-light: #2a2a3e; /* 浅背景 */
---color-text: #e2e8f0;          /* 文字颜色 */
---color-text-muted: #94a3b8;    /* 次要文字 */
---color-border: #3f3f5a;        /* 边框颜色 */
-```
-
-### 组件样式类
-
-- `.glass` - 玻璃态效果
-- `.gradient-border` - 渐变边框
-- `.btn-glow` - 按钮悬停发光效果
-- `.drag-region` - 标题栏拖动区域
-- `.no-drag` - 非拖动区域（按钮等）
-
----
-
-## 📋 待开发功能
-
-### RunJS 模块增强
-
-- [x] ~~实际的文件保存/加载功能~~ ✅ 已完成
-- [x] ~~代码自动补全~~ ✅ 已完成
-- [x] ~~键盘快捷键（Ctrl+Enter 运行）~~ ✅ 已完成
-- [ ] 代码片段管理
-- [x] ~~实际的 NPM 包安装（到本地目录）~~ ✅ 已完成
-- [x] ~~运行中代码的中断功能~~ ✅ 已完成
-
-### 新工具建议
-
-- [ ] **JSON 工具** - JSON 格式化、压缩、转换
-- [ ] **正则工具** - 正则表达式测试
-- [ ] **Base64 工具** - 编码/解码
-- [ ] **时间戳工具** - 时间转换
-- [ ] **颜色工具** - 颜色选择和转换
-- [ ] **API 测试** - 类似 Postman 的 HTTP 请求工具
-
----
-
-## 🔐 安全注意事项
-
-1. **代码沙箱**：使用 `vm` 模块执行用户代码，限制了可访问的模块
-2. **Require 劫持**：自定义 `createSafeRequire` 函数，只允许加载：
-   - 所有的 Node.js 内置模块（`fs`, `path`, `http`, `net` 等）
-   - 用户显式安装的 NPM 包
-3. **资源管理**：劫持 `http.createServer` 和 `net.Server` 来追踪并自动释放端口
-4. **执行超时**：代码执行限时 30 秒
-5. **contextIsolation**：启用上下文隔离，渲染进程无法直接访问 Node.js API
-
----
-
-## 📝 开发命令
+### 2.2 安装与运行
 
 ```bash
 # 安装依赖
 npm install
 
-# 开发模式
+# 启动开发环境（Electron + Renderer HMR）
 npm run dev
+```
 
-# 类型检查
+### 2.3 常用命令
+
+```bash
+# 代码质量
+npm run lint
 npm run typecheck
-
-# 代码格式化
 npm run format
 
-# 构建 Windows 版本
+# 构建
+npm run build
 npm run build:win
-
-# 构建 macOS 版本
 npm run build:mac
-
-# 构建 Linux 版本
 npm run build:linux
+
+# 版本号补丁升级
+npm run bump:patch
+```
+
+### 2.4 首次排错建议
+
+- 启动失败先看终端报错，再看 Electron 主进程日志。
+- 若更新检查/网络请求超时，先到应用设置里配置代理（`app:setProxy`）。
+- 若 RunJS 包安装异常，检查 NPM 安装目录是否有写权限。
+
+---
+
+## 3. 项目结构（当前真实结构）
+
+```text
+dev-toolbox/
+├─ src/
+│  ├─ main/                        # Electron 主进程
+│  │  ├─ index.ts                  # 主入口（窗口、托盘、更新、IPC 注册）
+│  │  └─ services/
+│  │     ├─ codeRunner.ts          # RunJS 执行与资源清理
+│  │     ├─ npmManager.ts          # NPM 搜索/安装/版本/类型
+│  │     ├─ domainLookup.ts        # DNS/IP/端口扫描/技术栈识别
+│  │     ├─ httpClient.ts          # HTTP 请求代理执行
+│  │     ├─ ossManager.ts          # OSS 上传与进度事件
+│  │     ├─ sqlExpert.ts           # SQL Expert 主流程
+│  │     ├─ dockService.ts         # Dock 悬浮窗服务
+│  │     └─ notification.ts        # 全局通知
+│  ├─ preload/
+│  │  ├─ index.ts                  # 安全桥接 API（window.api）
+│  │  ├─ index.d.ts                # API 类型声明
+│  │  └─ dock.ts                   # Dock preload
+│  └─ renderer/
+│     ├─ index.html
+│     ├─ dock.html
+│     └─ src/
+│        ├─ App.vue                # 工具路由/主布局
+│        ├─ main.ts
+│        ├─ components/
+│        ├─ views/                 # 各工具页面
+│        ├─ styles/
+│        └─ utils/
+├─ resources/                      # 图标与静态资源
+├─ scripts/                        # 脚本（如 bump-version）
+├─ DEVELOPMENT.md                  # 本文档
+└─ package.json
 ```
 
 ---
 
-## 🔄 版本历史
+## 4. 架构说明（维护同学重点）
 
-### v1.8.0 (2026-01-31)
+### 4.1 分层模型
 
-- **macOS Dock 动态应用管理**
-  - 支持添加/删除 Dock 应用
-  - 支持拖拽排序应用顺序
-  - 支持自定义应用（打开网址或本地程序）
-  - 支持分隔线管理
-  - 配置自动持久化到本地存储
+- Renderer（Vue）：只负责 UI 与交互，不直接触达 Node 能力。
+- Preload（contextBridge）：暴露白名单 API（`window.api`）。
+- Main（Electron）：实现系统能力、网络、文件、数据库、AI 调用等。
 
-### v1.7.0 (2026-01-23)
+### 4.2 数据流
 
-- **新增域名查询工具**
-  - DNS 解析：获取 IPv4/IPv6 地址
-  - IP 地理位置：查询国家、城市、运营商
-  - 技术栈识别：服务器、框架、CDN
-  - 美观的卡片式 UI 设计
+1. 页面触发操作（例如 RunJS 执行、SQL 查询）。
+2. 调用 `window.api.xxx`。
+3. Preload 转发为 `ipcRenderer.invoke/send`。
+4. Main 对应 `ipcMain.handle/on` 执行业务。
+5. 返回结果，或通过事件流式推送进度。
 
-### v1.6.0 (2026-01-15)
+### 4.3 安全边界
 
-- **动态本地类型加载** - 从已安装的 NPM 包读取类型定义
-  - 自动从 `node_modules` 读取 `.d.ts` 文件
-  - 支持递归解析相对路径依赖
-  - 本地没有类型时回退到 CDN 获取
-  - **版本切换同步** - 切换包版本后自动更新类型定义
-  - **编辑器初始化预加载** - 启动时加载所有已安装包的类型
-- 重构 `typeLoader.ts`：从 1130 行减少到 270 行（删除硬编码类型）
+- `contextIsolation: true`
+- `nodeIntegration: false`
+- 仅通过 preload 白名单 API 访问主进程能力
+- RunJS 代码在 `vm` 沙箱执行，并限制可 `require` 范围
 
-### v1.5.0 (2026-01-14)
+---
 
-- 新增动态 NPM 包类型加载功能
-  - 自动检测代码中的 `require`/`import` 语句
-  - 从 unpkg/jsdelivr CDN 获取类型定义
-  - 缓存已加载类型，避免重复请求
+## 5. 功能模块总览
 
-### v1.4.0 (2026-01-14)
+### 5.1 RunJS
 
-- 新增手动端口终止功能
-  - 输入端口号，使用 `netstat` 查找占用端口的 PID
-  - 使用 `tasklist` 验证进程名称为 `electron.exe`
-  - 使用 `taskkill` 终止目标进程
-- 优化 Server 追踪机制，使用 Proxy + require.cache 实现全局劫持
+能力：
 
-### v1.3.0 (2026-01-14)
+- JS/TS 运行（TS 经 `esbuild` 转译）
+- 日志流式推送（`code:log`）
+- 支持常驻服务（Express/HTTP Server）追踪与清理
+- 支持按端口终止 Electron 进程（Windows）
 
-- 新增 Express 框架内置支持
-- 优化代码编辑器类型提示
+关键点：
 
-### v1.2.0 (2026-01-14)
+- 全局劫持 `http/https/net` 的 `createServer` 以追踪活跃服务。
+- 每次执行前自动清理上一轮残留 Server，避免端口占用。
 
-- 实现真实 NPM 包安装与版本管理
-- 增强代码运行器：支持异步/Promise/ESM
-- 支持 Express/Http Server 等常驻服务运行
-- 实现实时日志流式输出
-- 自动清理网络端口资源
+### 5.2 NPM 管理
 
-### v1.1.0 (2026-01-14)
+能力：
 
-- 新增代码自动补全功能（JS/TS 代码片段、NPM 包提示）
-- 新增快捷键支持（Ctrl+Enter 运行、Esc 停止）
-- 新增运行中断功能
-- 优化 UI 样式，增加面板间距
-- 优化输出面板，添加运行状态指示
+- 搜索/安装/卸载/版本切换
+- 安装目录切换与重置
+- 本地读取 `.d.ts`，必要时自动尝试安装 `@types/*`
 
-### v1.0.0 (2026-01-14)
+关键点：
 
-- 初始版本
-- 实现 RunJS 代码运行功能
-- Monaco Editor 集成
-- NPM 包管理（模拟）
-- 自定义窗口和深色主题
+- 默认安装目录：`app.getPath('userData')/npm_packages`
+- 使用 `npmmirror` 源加速：`https://registry.npmmirror.com`
+
+### 5.3 域名查询
+
+能力：
+
+- DNS（IPv4/IPv6）解析
+- IP 地理位置、ISP、连接类型
+- 反向 DNS
+- HTTP 头识别服务端技术栈
+- 端口扫描（优先 Nmap，失败回退 Socket）
+
+### 5.4 HTTP 请求工具
+
+- 在主进程发起请求，规避前端 CORS 限制
+- 支持方法、Headers、Body、Timeout
+
+### 5.5 OSS 管理
+
+- 文件/文件夹选择
+- 多文件上传与实时进度
+- 任务取消
+
+### 5.6 SQL Expert
+
+能力：
+
+- MySQL 测试连接/连接池
+- Schema 动态加载
+- 只读 SQL 执行与校验
+- AI 多轮工具调用（查询/表结构/图表/导出/记忆）
+- 记忆库增删改查
+
+关键约束：
+
+- 仅允许 `SELECT/WITH` 只读语句
+- 禁止 `SELECT *`
+- 禁止修改性 SQL 与系统库越权访问
+
+### 5.7 Dock 模块
+
+- 独立透明窗口
+- 支持停靠位置、缩放、自动隐藏
+- 快捷动作调用
+
+### 5.8 应用级能力
+
+- 自动更新（GitHub Releases）
+- 托盘最小化/退出策略
+- 代理设置
+- 开机自启动
+- 关闭行为（询问/最小化/退出）
+
+---
+
+## 6. IPC 接口分组（以 preload 为准）
+
+### 6.1 window
+
+- `window:minimize`
+- `window:maximize`
+- `window:close`
+- `window:isMaximized`
+- 事件：`window:maximized-change`
+
+### 6.2 app
+
+- `app:getVersion`
+- `app:checkUpdate`
+- `app:downloadUpdate`
+- `app:installUpdate`
+- `app:openFile`
+- `app:setProxy`
+- `app:getAutoLaunch` / `app:setAutoLaunch`
+- `app:getCloseBehavior` / `app:setCloseBehavior`
+- `app:closeDialogResult`
+- `app:quit`
+- 事件：`app:showCloseDialog` / `app:downloadProgress` / `app:updateDownloaded`
+
+### 6.3 业务模块
+
+- codeRunner：`code:run` / `code:stop` / `code:clean` / `code:killPort` + 事件 `code:log`
+- npm：`npm:search` / `npm:install` / `npm:uninstall` / `npm:list` / `npm:versions` / `npm:changeVersion` / `npm:getDir` / `npm:setDir` / `npm:resetDir` / `npm:getTypes` / `npm:clearTypeCache`
+- domain：`domain:lookup` / `domain:scanPorts`
+- dock：`dock:open` / `dock:close` / `dock:isOpen` / `dock:action`
+- http：`http:send`
+- oss：`oss:selectFiles` / `oss:selectFolder` / `oss:upload` / `oss:cancelUpload` + 事件 `oss:uploadProgress`
+- sqlExpert：`sql-expert:*`（连接测试、配置、schema、执行、AI、记忆管理等）+ 流式事件
+
+---
+
+## 7. 本地数据与配置落地
+
+均位于 Electron `app.getPath('userData')` 目录下。
+
+主要文件/目录：
+
+- `npm-config.json`：RunJS 的 npm 安装目录配置
+- `npm_packages/`：RunJS 动态安装包目录（默认）
+- `sql-expert/config.json`：SQL Expert 配置
+- `sql-expert/schema.txt`：最近一次 schema 缓存
+- `sql-expert/memories/*.json`：按数据库 + API Key hash 隔离的记忆文件
+
+说明：
+
+- 不建议把包含敏感信息的 userData 直接提交到仓库。
+- 调试问题时优先确认这里的配置与缓存是否符合预期。
+
+---
+
+## 8. 如何新增一个工具模块
+
+以新增 `JsonTool` 为例：
+
+1. 新建渲染页面
+
+- 路径：`src/renderer/src/views/jsontool/JsonTool.vue`
+
+2. 注册侧边栏入口
+
+- 文件：`src/renderer/src/App.vue`
+- 在 `tools` 增加：`{ id: 'jsontool', name: 'JSON 工具', icon: '...' }`
+
+3. 注册异步组件映射
+
+- 文件：`src/renderer/src/App.vue`
+- 在 `toolComponents` 增加：
+  - `jsontool: defineAsyncComponent(() => import('./views/jsontool/JsonTool.vue'))`
+
+4. 若需要系统能力，新增 IPC
+
+- Main：在 `src/main/services/` 新建服务并注册 `ipcMain.handle/on`
+- Preload：在 `src/preload/index.ts` 暴露 API
+- 类型：在 `src/preload/index.d.ts` 补充接口声明
+
+5. 自测与验收
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm run dev` 手动验证交互与边界场景
+
+---
+
+## 9. 开发规范与建议
+
+- 单向依赖：`renderer -> preload -> main`，不要反向耦合。
+- IPC 命名建议：`<domain>:<action>`，例如 `oss:upload`。
+- 所有新增 preload API 必须同步更新 `index.d.ts`。
+- 尽量让主进程服务模块职责单一，避免大而全文件继续膨胀。
+- 对外部资源调用（网络/数据库）统一加超时与错误兜底。
+
+---
+
+## 10. 发布说明
+
+`electron-builder` 已配置在 `package.json#build`：
+
+- `appId`: `com.devtoolbox.app`
+- 输出目录：`dist/`
+- 发布源：GitHub Releases（owner: `1847123733`, repo: `dev-toolbox`）
+
+常见流程：
+
+1. `npm run typecheck`
+2. `npm run build:win`（或对应平台）
+3. 验证安装包与自动更新链路
+
+---
+
+## 11. 常见问题（FAQ）
+
+1. RunJS 安装包后 `require` 失败
+
+- 检查包是否安装到当前配置目录。
+- 尝试重启应用并重新加载类型。
+
+2. 端口扫描慢或结果少
+
+- 优先安装 `nmap` 提升扫描效果。
+- 无 `nmap` 时会回退 Socket 扫描，仅覆盖常见端口。
+
+3. SQL Expert 无法回答
+
+- 先检查 DB 配置与 schema 是否加载成功。
+- 再检查 AI URL/API Key/Model 是否有效。
+
+4. 更新检查失败
+
+- 多数为网络问题，先配置代理后重试。
+
+---
+
+## 12. 维护记录（文档）
+
+- 2026-04-13：重构开发文档结构，修正旧版模块缺失与目录不一致问题，改为“快速上手 + 深度维护”双层文档。
