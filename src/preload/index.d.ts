@@ -252,6 +252,7 @@ interface SqlExpertDbConfig {
 }
 
 interface SqlExpertAiConfig {
+  provider?: string
   url: string
   apiKey: string
   model: string
@@ -363,6 +364,12 @@ interface SqlExpertAPI {
   checkBalance: (config?: { url?: string; apiKey?: string }) => Promise<{
     success: boolean
     message: string
+  }>
+  getModels: (config?: { provider?: string; url?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    message: string
+    models: string[]
+    modelOptions?: Array<{ label: string; value: string }>
   }>
   // 流式进度事件监听
   onAiContent: (callback: (data: { requestId: string; content: string }) => void) => void

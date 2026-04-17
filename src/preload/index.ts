@@ -171,7 +171,7 @@ const api = {
     executeSql: (sql: string) => ipcRenderer.invoke('sql-expert:execute-sql', sql),
     saveConfig: (config: {
       db: { host: string; port: number; user: string; password: string; database: string }
-      ai: { url: string; apiKey: string; model: string }
+      ai: { provider?: string; url: string; apiKey: string; model: string }
     }) => ipcRenderer.invoke('sql-expert:save-config', config),
     loadConfig: () => ipcRenderer.invoke('sql-expert:load-config'),
     loadSchema: (dbConfig?: {
@@ -193,6 +193,8 @@ const api = {
       ipcRenderer.invoke('sql-expert:describe-table', tableNames),
     checkBalance: (config?: { url?: string; apiKey?: string }) =>
       ipcRenderer.invoke('sql-expert:check-balance', config),
+    getModels: (config?: { provider?: string; url?: string; apiKey?: string }) =>
+      ipcRenderer.invoke('sql-expert:get-models', config),
 
     // 流式进度事件监听
     onAiContent: (callback: (data: { requestId: string; content: string }) => void) => {

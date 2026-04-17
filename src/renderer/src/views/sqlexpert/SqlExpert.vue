@@ -48,6 +48,12 @@
           <span v-if="schema" class="topbar-schema-badge">
             已加载表结构
           </span>
+          <button class="topbar-ai-btn" @click="showAiSettingsModal = true" title="AI 智能体设置">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.5 3h5a2.5 2.5 0 012.5 2.5V9a2 2 0 002 2 2 2 0 012 2v2a2 2 0 01-2 2 2 2 0 00-2 2v.5A2.5 2.5 0 0114.5 22h-5A2.5 2.5 0 017 19.5V19a2 2 0 00-2-2 2 2 0 01-2-2v-2a2 2 0 012-2 2 2 0 002-2V5.5A2.5 2.5 0 019.5 3z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6M12 9v6" />
+            </svg>
+          </button>
           <button class="topbar-settings-btn" @click="showSettings = !showSettings" title="设置">
             <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -63,7 +69,7 @@
           <h1 class="welcome-title">企业级分析专家</h1>
           <p class="welcome-subtitle">告别繁琐 SQL，用对话轻松获取数据洞察</p>
           <p v-if="!schema" class="welcome-hint">
-            请先点击右上角 ⚙ 配置数据库和 AI 模型
+            请先点击右上角 ⚙ 配置数据库，再点击 🤖 配置 AI 模型
           </p>
         </div>
       </div>
@@ -256,23 +262,6 @@
           </div>
         </div>
 
-        <!-- AI 配置 -->
-        <div class="settings-section">
-          <h3 class="section-title">AI 智能体设置 <span class="section-tag">deepseek</span></h3>
-          <div class="form-group">
-            <label>URL</label>
-            <input v-model="aiForm.url" disabled placeholder="https://api.deepseek.com/v1" />
-          </div>
-          <div class="form-group">
-            <label>API Key</label>
-            <input v-model="aiForm.apiKey" type="password" placeholder="sk-..." />
-          </div>
-          <div class="form-group">
-            <label>Model</label>
-            <input v-model="aiForm.model" placeholder="deepseek-chat" />
-          </div>
-        </div>
-
         <!-- 一键加载表结构 -->
         <div class="settings-section">
           <h3 class="section-title">数据库表结构</h3>
@@ -393,6 +382,80 @@
             <button class="btn btn-primary" @click="onSaveMemory" :disabled="memorySaving || !memoryEditContent.trim()">
               {{ memorySaving ? '保存中...' : '保存' }}
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 智能体设置弹窗 -->
+    <div v-if="showAiSettingsModal" class="modal-overlay" @click.self="showAiSettingsModal = false">
+      <div class="modal-content ai-settings-modal">
+        <div class="modal-header">
+          <h3>🤖 AI 智能体设置</h3>
+          <button class="modal-close" @click="showAiSettingsModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-section" style="margin-bottom: 0;">
+            <h3 class="section-title">模型提供方</h3>
+            <p class="section-desc">支持 DeepSeek、OpenAI、火山方舟 Ark（OpenAI 兼容）等模型服务。</p>
+            <div class="form-group">
+              <label>Provider</label>
+              <select v-model="aiForm.provider">
+                <option v-for="item in aiProviderOptions" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Base URL</label>
+              <input v-model="aiForm.url" :placeholder="baseUrlPlaceholder" />
+            </div>
+            <div class="form-group">
+              <label>API Key</label>
+              <input v-model="aiForm.apiKey" type="password" :placeholder="apiKeyPlaceholder" />
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <div class="form-label-row">
+                <label>Model</label>
+                <button class="btn btn-outline model-fetch-btn" :disabled="fetchingModels" @click="fetchModelList">
+                  {{ fetchingModels ? '获取中...' : '获取模型列表' }}
+                </button>
+              </div>
+              <select v-if="modelOptions.length > 0" v-model="aiForm.model">
+                <option v-for="model in filteredModelOptions" :key="model.value" :value="model.value">
+                  {{ model.label }}
+                </option>
+              </select>
+              <input
+                v-if="modelOptions.length > 0"
+                v-model="modelSearchKeyword"
+                placeholder="搜索模型（支持名称或 ID）"
+                style="margin-top: 8px;"
+              />
+              <div
+                v-if="modelOptions.length > 0 && filteredModelOptions.length === 0"
+                class="schema-status"
+                style="text-align: left;"
+              >
+                未找到匹配模型，请尝试其他关键词
+              </div>
+              <input v-else v-model="aiForm.model" :placeholder="modelInputPlaceholder" />
+              <div v-if="aiForm.provider === 'ark'" class="schema-status" style="text-align: left; color: var(--color-text-muted);">
+                Ark 当前按 Model ID 调用；请确认当前账号/项目已开通并有该模型权限。
+              </div>
+              <div v-if="modelFetchStatus" class="schema-status" :class="modelFetchStatus.success ? 'success' : 'error'" style="text-align: left;">
+                {{ modelFetchStatus.message }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div class="schema-status error" style="margin-top: 0; text-align: left;">
+            <span v-if="aiForm.provider !== 'deepseek'">提示：余额查询接口当前仅对 DeepSeek 生效。</span>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-outline" @click="showAiSettingsModal = false">取消</button>
+            <button class="btn btn-primary" @click="saveAiSettings">保存</button>
           </div>
         </div>
       </div>
@@ -525,6 +588,7 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const expandedTools = ref<Set<string>>(new Set())
 
 const showSessionFilesModal = ref(false)
+const showAiSettingsModal = ref(false)
 
 // 记忆管理弹窗状态
 const showMemoryDetailModal = ref(false)
@@ -574,15 +638,82 @@ const sessionFiles = computed(() => {
 
 // 设置表单
 const dbForm = ref({ host: 'localhost', port: 3306, user: 'root', password: '', database: '' })
-const aiForm = ref({ url: 'https://api.deepseek.com/v1', apiKey: '', model: 'deepseek-chat' })
+type AiProviderValue = 'deepseek' | 'openai' | 'ark' | 'anthropic'
+const aiProviderOptions = [
+  { value: 'deepseek', label: 'DeepSeek' },
+  // { value: 'openai', label: 'OpenAI' },
+  { value: 'ark', label: '火山方舟 Ark' },
+  // { value: 'anthropic', label: 'Anthropic（手动模型）' }
+]
+const aiProviderDefaults: Record<string, { url: string; model: string }> = {
+  deepseek: { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  openai: { url: 'https://api.openai.com/v1', model: 'gpt-4.1' },
+  ark: { url: 'https://ark.cn-beijing.volces.com/api/v3', model: '' },
+  anthropic: { url: 'https://api.anthropic.com/v1', model: 'claude-3-7-sonnet-latest' }
+}
+const aiModelPlaceholders: Record<string, string> = {
+  deepseek: 'deepseek-chat',
+  openai: 'gpt-4.1',
+  ark: 'ep-xxxxxxxxxxxxxxxxxx',
+  anthropic: 'claude-3-7-sonnet-latest'
+}
+const apiKeyPlaceholders: Record<string, string> = {
+  deepseek: 'sk-...',
+  openai: 'sk-...',
+  ark: 'Ark API Key',
+  anthropic: 'sk-ant-...'
+}
+const aiForm = ref<{ provider: AiProviderValue; url: string; apiKey: string; model: string }>({
+  provider: 'deepseek',
+  url: 'https://api.deepseek.com/v1',
+  apiKey: '',
+  model: 'deepseek-chat'
+})
 const testingDb = ref(false)
 const dbTestResult = ref<{ success: boolean; message: string } | null>(null)
 const schemaStatus = ref<{ success: boolean; message: string } | null>(null)
 
 const checkingBalance = ref(false)
 const balanceResult = ref<{ success: boolean; message: string } | null>(null)
+const fetchingModels = ref(false)
+const modelOptions = ref<Array<{ label: string; value: string }>>([])
+const modelSearchKeyword = ref('')
+const modelFetchStatus = ref<{ success: boolean; message: string } | null>(null)
+const filteredModelOptions = computed(() => {
+  const keyword = modelSearchKeyword.value.trim().toLowerCase()
+  if (!keyword) return modelOptions.value
+  return modelOptions.value.filter(item => {
+    const label = String(item.label || '').toLowerCase()
+    const value = String(item.value || '').toLowerCase()
+    return label.includes(keyword) || value.includes(keyword)
+  })
+})
+
+const inferAiProviderFromUrl = (url: string): AiProviderValue => {
+  const normalized = String(url || '').toLowerCase()
+  if (normalized.includes('api.openai.com')) return 'openai'
+  if (normalized.includes('ark.cn-beijing.volces.com') || normalized.includes('volces.com/api/v3')) return 'ark'
+  if (normalized.includes('api.anthropic.com')) return 'anthropic'
+  return 'deepseek'
+}
+
+const normalizeAiProvider = (provider?: string, url?: string): AiProviderValue => {
+  const normalized = String(provider || '').trim().toLowerCase()
+  if (normalized === 'deepseek' || normalized === 'openai' || normalized === 'ark' || normalized === 'anthropic') {
+    return normalized
+  }
+  return inferAiProviderFromUrl(String(url || ''))
+}
+
+const baseUrlPlaceholder = computed(() => aiProviderDefaults[aiForm.value.provider]?.url || 'https://api.deepseek.com/v1')
+const modelInputPlaceholder = computed(() => aiModelPlaceholders[aiForm.value.provider] || '请输入模型名')
+const apiKeyPlaceholder = computed(() => apiKeyPlaceholders[aiForm.value.provider] || 'sk-...')
 
 const checkBalance = async () => {
+  if (aiForm.value.provider !== 'deepseek') {
+    balanceResult.value = null
+    return
+  }
   if (!aiForm.value.url || !aiForm.value.apiKey) return
   checkingBalance.value = true
   try {
@@ -598,10 +729,99 @@ const checkBalance = async () => {
   }
 }
 
+const fetchModelList = async () => {
+  if (typeof window.api?.sqlExpert?.getModels !== 'function') {
+    modelFetchStatus.value = { success: false, message: '当前运行环境未加载 getModels 接口，请重启应用后再试' }
+    return
+  }
+
+  if (!aiForm.value.url || !aiForm.value.apiKey) {
+    modelFetchStatus.value = { success: false, message: '请先填写 Base URL 和 API Key' }
+    return
+  }
+
+  fetchingModels.value = true
+  modelFetchStatus.value = null
+
+  try {
+    const result = await window.api.sqlExpert.getModels({
+      provider: aiForm.value.provider,
+      url: aiForm.value.url,
+      apiKey: aiForm.value.apiKey
+    })
+
+    if (!result.success) {
+      modelOptions.value = []
+      modelSearchKeyword.value = ''
+      modelFetchStatus.value = { success: false, message: result.message || '获取模型失败' }
+      return
+    }
+
+    const optionsFromServer = Array.isArray(result.modelOptions)
+      ? result.modelOptions
+        .map(item => ({
+          label: String(item?.label || item?.value || '').trim(),
+          value: String(item?.value || '').trim()
+        }))
+        .filter(item => item.label && item.value)
+      : []
+    const optionsFromLegacyModels = Array.isArray(result.models)
+      ? result.models
+        .map(model => String(model || '').trim())
+        .filter(Boolean)
+        .map(model => ({ label: model, value: model }))
+      : []
+    modelOptions.value = optionsFromServer.length > 0 ? optionsFromServer : optionsFromLegacyModels
+
+    if (modelOptions.value.length === 0) {
+      modelSearchKeyword.value = ''
+      modelFetchStatus.value = { success: false, message: result.message || '未获取到可用模型' }
+      return
+    }
+
+    if (!modelOptions.value.some(item => item.value === aiForm.value.model)) {
+      aiForm.value.model = modelOptions.value[0].value
+    }
+    modelSearchKeyword.value = ''
+    modelFetchStatus.value = { success: true, message: result.message || `已获取 ${modelOptions.value.length} 个模型` }
+  } catch (err: any) {
+    modelOptions.value = []
+    modelSearchKeyword.value = ''
+    modelFetchStatus.value = { success: false, message: err?.message || '获取模型失败' }
+  } finally {
+    fetchingModels.value = false
+  }
+}
+
 // 自动在 API Key 就绪时查询一次余额
 watch(() => aiForm.value.apiKey, (val) => {
   if (val) checkBalance()
 }, { immediate: true })
+
+watch(() => [aiForm.value.url, aiForm.value.apiKey], (next, prev) => {
+  if (!prev) return
+  if (next[0] !== prev[0] || next[1] !== prev[1]) {
+    modelOptions.value = []
+    modelSearchKeyword.value = ''
+    modelFetchStatus.value = null
+  }
+})
+
+watch(() => aiForm.value.provider, (provider, oldProvider) => {
+  if (provider === oldProvider) return
+  const preset = aiProviderDefaults[provider]
+  if (!preset) return
+  aiForm.value.url = preset.url
+  aiForm.value.model = preset.model
+  modelOptions.value = []
+  modelSearchKeyword.value = ''
+  modelFetchStatus.value = null
+  if (provider !== 'deepseek') {
+    balanceResult.value = null
+  } else if (aiForm.value.apiKey) {
+    checkBalance()
+  }
+})
 
 // 监听会话发送状态：由发送中(true)变成空闲(false)时，触发余额查询
 watch(isSending, (newVal, oldVal) => {
@@ -889,6 +1109,21 @@ const saveSettings = async () => {
   }
 }
 
+const saveAiSettings = async () => {
+  try {
+    await window.api.sqlExpert.saveConfig({
+      db: { ...dbForm.value },
+      ai: { ...aiForm.value }
+    })
+    showAiSettingsModal.value = false
+    if (aiForm.value.provider === 'deepseek') {
+      await checkBalance()
+    }
+  } catch (e) {
+    console.error('保存 AI 设置失败', e)
+  }
+}
+
 // 加载已保存的配置
 onMounted(async () => {
   try {
@@ -899,7 +1134,9 @@ onMounted(async () => {
         dbForm.value = { ...dbForm.value, ...db }
       }
       if (ai) {
-        aiForm.value = { ...aiForm.value, ...ai }
+        const merged = { ...aiForm.value, ...ai }
+        const provider = normalizeAiProvider((ai as { provider?: string })?.provider, merged.url)
+        aiForm.value = { ...merged, provider }
       }
     }
   } catch (e) {
@@ -950,6 +1187,8 @@ watch(
 
 .topbar-settings-btn { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--color-text-muted); cursor: pointer; transition: all 0.2s ease; }
 .topbar-settings-btn:hover { background: var(--color-surface-lighter); color: var(--color-text); border-color: var(--color-border); }
+.topbar-ai-btn { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: var(--color-text-muted); cursor: pointer; transition: all 0.2s ease; }
+.topbar-ai-btn:hover { background: var(--color-surface-lighter); border-color: var(--color-primary); color: var(--color-primary); }
 .main-welcome { flex: 1; display: flex; align-items: center; justify-content: center; }
 .welcome-content { text-align: center; animation: fadeIn 0.8s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -1035,9 +1274,14 @@ watch(
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--color-text-muted); margin-bottom: 6px; }
 .form-group input { width: 100%; padding: 10px 14px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: var(--color-text); font-size: 14px; outline: none; transition: all 0.2s ease; }
+.form-group select { width: 100%; padding: 10px 14px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: var(--color-text); font-size: 14px; outline: none; transition: all 0.2s ease; }
 .form-group input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15); }
+.form-group select:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15); }
 .form-group input:disabled { background: var(--color-surface-lighter); color: var(--color-text-muted); cursor: not-allowed; }
 .form-group input::placeholder { color: var(--color-text-muted); opacity: 0.5; }
+.form-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.form-label-row label { margin-bottom: 0; }
+.model-fetch-btn { padding: 4px 10px; font-size: 12px; border-radius: 8px; }
 .form-actions-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
 .test-result { font-size: 13px; font-weight: 500; }
 .test-result.success { color: #10b981; }
@@ -1073,6 +1317,7 @@ watch(
 .modal-close { background: var(--color-surface-light); border: 1px solid var(--color-border); font-size: 14px; color: var(--color-text-muted); cursor: pointer; border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .modal-close:hover { background: var(--color-surface-lighter); color: var(--color-text); }
 .modal-body { padding: 16px; overflow-y: auto; }
+.ai-settings-modal { width: 620px; }
 .session-file-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; margin-bottom: 8px; background: var(--color-surface-light); border: 1px solid var(--color-border); border-radius: 12px; transition: all 0.2s; cursor: pointer; }
 .session-file-item:last-child { margin-bottom: 0; }
 .session-file-item:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 4px 12px rgba(99,102,241,0.06); transform: translateY(-1px); }

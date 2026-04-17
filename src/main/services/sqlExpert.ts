@@ -5,7 +5,7 @@
 import { ipcMain, app } from 'electron'
 import * as mysql from 'mysql2/promise'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
 import { createHash, randomUUID } from 'crypto'
 import OpenAI from 'openai'
 
@@ -20,6 +20,7 @@ interface DbConfig {
 }
 
 interface AiConfig {
+  provider?: string
   url: string
   apiKey: string
   model: string
@@ -85,6 +86,13 @@ interface AgentUsage {
   promptCacheMissTokens: number
 }
 
+type AiProvider = 'deepseek' | 'openai' | 'ark' | 'anthropic'
+
+interface ModelOptionItem {
+  label: string
+  value: string
+}
+
 // ============ 全局状态 ============
 
 let connectionPool: mysql.Pool | null = null
@@ -121,19 +129,175 @@ function sanitizeFileName(value: string) {
   return value.replace(/[\\/:*?"<>|]+/g, '_').trim()
 }
 
+function inferProviderFromUrl(url: string): AiProvider {
+  const normalized = String(url || '').toLowerCase()
+  if (normalized.includes('api.openai.com')) return 'openai'
+  if (normalized.includes('ark.cn-beijing.volces.com') || normalized.includes('volces.com/api/v3')) return 'ark'
+  if (normalized.includes('api.anthropic.com')) return 'anthropic'
+  return 'deepseek'
+}
+
+function normalizeProvider(rawProvider?: string, url?: string): AiProvider {
+  const normalized = String(rawProvider || '').trim().toLowerCase()
+  if (normalized === 'deepseek' || normalized === 'openai' || normalized === 'ark' || normalized === 'anthropic') {
+    return normalized as AiProvider
+  }
+  return inferProviderFromUrl(String(url || ''))
+}
+
+function buildAiRequestErrorMessage(rawMessage: string, provider: AiProvider, model: string): string {
+  const message = String(rawMessage || '').trim() || 'AI 请求失败'
+  if (provider !== 'ark') return message
+
+  const lower = message.toLowerCase()
+  const isEndpointOrModelNotFound =
+    lower.includes('invalidendpointormodel') ||
+    lower.includes('model or endpoint') ||
+    lower.includes('does not exist or you do not have access')
+
+  if (!isEndpointOrModelNotFound) return message
+
+  const hint =
+    '当前配置使用 Model ID。该报错通常表示当前账号/项目对该 Model ID 无权限，或该模型未开通。'
+  return `${message}\n${hint}\n当前 Model: ${model || '(空)'}`
+}
+
+function buildModelOptionItems(rawList: any[], provider: AiProvider): ModelOptionItem[] {
+  const options: ModelOptionItem[] = []
+  const usedValues = new Set<string>()
+  const addOption = (label: string, value: string) => {
+    const finalLabel = String(label || '').trim()
+    const finalValue = String(value || '').trim()
+    if (!finalLabel || !finalValue || usedValues.has(finalValue)) return
+    usedValues.add(finalValue)
+    options.push({ label: finalLabel, value: finalValue })
+  }
+
+  const collectStringValues = (input: unknown, maxDepth = 4, depth = 0): string[] => {
+    if (depth > maxDepth || input == null) return []
+    if (typeof input === 'string') return [input]
+    if (Array.isArray(input)) return input.flatMap(item => collectStringValues(item, maxDepth, depth + 1))
+    if (typeof input === 'object') {
+      return Object.values(input as Record<string, unknown>).flatMap(value =>
+        collectStringValues(value, maxDepth, depth + 1)
+      )
+    }
+    return []
+  }
+
+  for (const item of rawList) {
+    const directId = String(item?.id || item?.name || '').trim()
+    const explicitEndpointId = String(
+      item?.endpoint_id ||
+      item?.endpointId ||
+      item?.endpoint?.id ||
+      item?.meta?.endpoint_id ||
+      item?.metadata?.endpoint_id ||
+      item?.resource_id ||
+      ''
+    ).trim()
+    const modelId = String(item?.model_id || item?.modelId || directId).trim()
+    const discoveredEndpointId =
+      collectStringValues(item)
+        .map(v => String(v || '').trim())
+        .find(v => /^ep-/i.test(v)) || ''
+    const endpointId = explicitEndpointId || discoveredEndpointId
+
+    if (provider === 'ark') {
+      // 按用户要求：Ark 下只展示/使用 Model ID，不展示 Endpoint ID。
+      if (modelId && !/^ep-/i.test(modelId)) {
+        addOption(modelId, modelId)
+      } else if (directId && !/^ep-/i.test(directId)) {
+        addOption(directId, directId)
+      } else if (endpointId && !/^ep-/i.test(endpointId)) {
+        addOption(endpointId, endpointId)
+      }
+    } else {
+      addOption(directId, directId)
+    }
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label))
+}
+
 function buildApiKeyHash(apiKey: string): string {
   return createHash('sha256').update(String(apiKey || '').trim()).digest('hex').slice(0, 24)
 }
 
-function buildMemoryScope(database: string, apiKey: string): string {
+function buildMemoryScope(database: string): string {
+  const db = sanitizeFileName(String(database || '').trim() || 'unknown_db')
+  return db
+}
+
+function buildLegacyMemoryScope(database: string, apiKey: string): string {
   const db = sanitizeFileName(String(database || '').trim() || 'unknown_db')
   const apiKeyHash = buildApiKeyHash(apiKey)
   return `${db}__${apiKeyHash}`
 }
 
-function getMemoryFilePath(database: string, apiKey: string): string {
-  const scope = buildMemoryScope(database, apiKey)
+function getMemoryFilePath(database: string, _apiKey?: string): string {
+  const scope = buildMemoryScope(database)
   return join(getMemoriesDir(), `${scope}.json`)
+}
+
+function getLegacyMemoryFilePath(database: string, apiKey: string): string {
+  const scope = buildLegacyMemoryScope(database, apiKey)
+  return join(getMemoriesDir(), `${scope}.json`)
+}
+
+function normalizeMemoryList(parsed: any): MemoryEntry[] {
+  const list = Array.isArray(parsed) ? parsed : parsed?.memories
+  if (!Array.isArray(list)) return []
+
+  return list
+    .filter(item => item && typeof item.content === 'string')
+    .map(item => ({
+      id: item.id || randomUUID(),
+      content: String(item.content),
+      createdAt: item.createdAt || new Date().toISOString(),
+      updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+      source: (item.source === 'tool' ? 'tool' : 'manual') as 'tool' | 'manual'
+    }))
+}
+
+function migrateLegacyMemoriesToDatabaseScope(database: string, apiKey: string): void {
+  const filePath = getMemoryFilePath(database)
+  if (existsSync(filePath)) return
+
+  const memoriesDir = getMemoriesDir()
+  const scope = buildMemoryScope(database)
+  const legacyPrefix = `${scope}__`
+  const legacyFiles = readdirSync(memoriesDir)
+    .filter(name => name.startsWith(legacyPrefix) && name.endsWith('.json'))
+    .map(name => join(memoriesDir, name))
+
+  const preferredLegacyFile = getLegacyMemoryFilePath(database, apiKey)
+  if (existsSync(preferredLegacyFile) && !legacyFiles.includes(preferredLegacyFile)) {
+    legacyFiles.unshift(preferredLegacyFile)
+  }
+
+  if (!legacyFiles.length) return
+
+  const merged: MemoryEntry[] = []
+  const idSet = new Set<string>()
+
+  for (const legacyFile of legacyFiles) {
+    try {
+      const parsed = JSON.parse(readFileSync(legacyFile, 'utf-8'))
+      const list = normalizeMemoryList(parsed)
+      for (const item of list) {
+        if (idSet.has(item.id)) continue
+        idSet.add(item.id)
+        merged.push(item)
+      }
+    } catch {
+      // ignore broken legacy file
+    }
+  }
+
+  if (merged.length > 0) {
+    writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf-8')
+  }
 }
 
 function loadConfigFromDisk(): SqlExpertConfig | null {
@@ -170,30 +334,20 @@ function loadSchemaFromDisk(): string {
 }
 
 function loadMemories(database: string, apiKey: string) {
+  migrateLegacyMemoriesToDatabaseScope(database, apiKey)
   const filePath = getMemoryFilePath(database, apiKey)
   if (!existsSync(filePath)) {
     writeFileSync(filePath, JSON.stringify([], null, 2), 'utf-8')
     return {
       memories: [] as MemoryEntry[],
       memoryPath: filePath,
-      memoryScope: buildMemoryScope(database, apiKey)
+      memoryScope: buildMemoryScope(database)
     }
   }
 
   try {
     const parsed = JSON.parse(readFileSync(filePath, 'utf-8'))
-    const list = Array.isArray(parsed) ? parsed : parsed?.memories
-    const memories = Array.isArray(list)
-      ? list
-        .filter(item => item && typeof item.content === 'string')
-        .map(item => ({
-          id: item.id || randomUUID(),
-          content: String(item.content),
-          createdAt: item.createdAt || new Date().toISOString(),
-          updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
-          source: (item.source === 'tool' ? 'tool' : 'manual') as 'tool' | 'manual'
-        }))
-      : []
+    const memories = normalizeMemoryList(parsed)
 
     // 兼容手工编辑：统一写回标准结构，保证后续可直接增量追加。
     writeFileSync(filePath, JSON.stringify(memories, null, 2), 'utf-8')
@@ -201,14 +355,14 @@ function loadMemories(database: string, apiKey: string) {
     return {
       memories,
       memoryPath: filePath,
-      memoryScope: buildMemoryScope(database, apiKey)
+      memoryScope: buildMemoryScope(database)
     }
   } catch {
     writeFileSync(filePath, JSON.stringify([], null, 2), 'utf-8')
     return {
       memories: [] as MemoryEntry[],
       memoryPath: filePath,
-      memoryScope: buildMemoryScope(database, apiKey)
+      memoryScope: buildMemoryScope(database)
     }
   }
 }
@@ -1008,9 +1162,14 @@ export function setupSqlExpert(): void {
       const savedConfig = loadConfigFromDisk()
       const url = config?.url || savedConfig?.ai?.url || 'https://api.deepseek.com/v1'
       const apiKey = config?.apiKey || savedConfig?.ai?.apiKey || ''
+      const provider = normalizeProvider(savedConfig?.ai?.provider, url)
 
       if (!apiKey) {
         return { success: false, message: 'API Key 不能为空' }
+      }
+
+      if (provider !== 'deepseek') {
+        return { success: false, message: '当前余额查询仅支持 DeepSeek' }
       }
 
       const base = url.replace(/\/v1\/?$/, '')
@@ -1055,6 +1214,88 @@ export function setupSqlExpert(): void {
        return { success: false, message: `查询失败: ${error instanceof Error ? error.message : String(error)}` }
     }
   })
+
+  // 获取模型列表（OpenAI 兼容 /models）
+  ipcMain.handle(
+    'sql-expert:get-models',
+    async (_event, config?: { provider?: string; url?: string; apiKey?: string }) => {
+      try {
+        const savedConfig = loadConfigFromDisk()
+        const provider = normalizeProvider(config?.provider || savedConfig?.ai?.provider, config?.url || savedConfig?.ai?.url)
+        const url = config?.url || savedConfig?.ai?.url || 'https://api.deepseek.com/v1'
+        const apiKey = config?.apiKey || savedConfig?.ai?.apiKey || ''
+
+        if (!apiKey) {
+          return { success: false, message: 'API Key 不能为空', models: [] as string[], modelOptions: [] as ModelOptionItem[] }
+        }
+
+        if (provider === 'anthropic') {
+          return {
+            success: false,
+            message: 'Anthropic 暂不支持通过当前接口自动获取模型列表，请手动填写模型名',
+            models: [] as string[],
+            modelOptions: [] as ModelOptionItem[]
+          }
+        }
+
+        const base = url.replace(/\/v1\/?$/, '')
+        const apiUrl = `${base}/models`
+
+        const res = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${apiKey}`
+          }
+        })
+
+        if (!res.ok) {
+          const errorText = await res.text()
+          let errMsg = `HTTP ${res.status}`
+          try {
+            const errorData = JSON.parse(errorText)
+            errMsg = errorData.error?.message || errorData.message || errMsg
+          } catch {
+            // ignore
+          }
+          throw new Error(errMsg)
+        }
+
+        const data = await res.json()
+        const rawList = Array.isArray(data?.data) ? data.data : []
+        const models = rawList
+          .map((item: any) => String(item?.id || item?.name || '').trim())
+          .filter(Boolean)
+          .sort((a: string, b: string) => a.localeCompare(b))
+        const modelOptions = buildModelOptionItems(rawList, provider)
+
+        if (provider === 'ark') {
+          return {
+            success: true,
+            message: modelOptions.length
+              ? `已获取 ${modelOptions.length} 个 Model ID`
+              : '未查询到可用模型',
+            models: modelOptions.map(option => option.value),
+            modelOptions
+          }
+        }
+
+        return {
+          success: true,
+          message: models.length ? `已获取 ${models.length} 个模型` : '未查询到可用模型',
+          models,
+          modelOptions
+        }
+      } catch (error) {
+        return {
+          success: false,
+          message: `获取模型失败: ${error instanceof Error ? error.message : String(error)}`,
+          models: [] as string[],
+          modelOptions: [] as ModelOptionItem[]
+        }
+      }
+    }
+  )
 
   // 加载配置
   ipcMain.handle('sql-expert:load-config', async () => {
@@ -1494,7 +1735,11 @@ export function setupSqlExpert(): void {
         }
       }
 
-      return { success: false, requestId, error: error instanceof Error ? error.message : 'AI 请求失败' }
+      const rawMessage = error instanceof Error ? error.message : 'AI 请求失败'
+      const savedConfig = loadConfigFromDisk()
+      const provider = normalizeProvider(savedConfig?.ai?.provider, savedConfig?.ai?.url)
+      const model = String(savedConfig?.ai?.model || '')
+      return { success: false, requestId, error: buildAiRequestErrorMessage(rawMessage, provider, model) }
     } finally {
       activeAiRequests.delete(requestId)
     }

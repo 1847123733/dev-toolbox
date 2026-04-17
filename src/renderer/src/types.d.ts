@@ -171,6 +171,12 @@ interface AppAPI {
 
 interface SqlExpertAPI {
   checkBalance: (payload: { url: string; apiKey: string }) => Promise<{ success: boolean; message: string }>
+  getModels: (payload?: { provider?: string; url?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    message: string
+    models: string[]
+    modelOptions?: Array<{ label: string; value: string }>
+  }>
   testDb: (config: {
     host: string; port: number; user: string; password: string; database: string
   }) => Promise<{ success: boolean; message: string }>
@@ -204,12 +210,12 @@ interface SqlExpertAPI {
   }>
   saveConfig: (config: {
     db: { host: string; port: number; user: string; password: string; database: string }
-    ai: { url: string; apiKey: string; model: string }
+    ai: { provider?: string; url: string; apiKey: string; model: string }
   }) => Promise<{ success: boolean; error?: string }>
   loadConfig: () => Promise<{
     config: {
       db: { host: string; port: number; user: string; password: string; database: string }
-      ai: { url: string; apiKey: string; model: string }
+      ai: { provider?: string; url: string; apiKey: string; model: string }
     } | null
     schema: string
     schemaPath: string
