@@ -14,7 +14,8 @@ const tools = [
   { id: 'dock', name: 'macOS Dock', icon: 'dock' },
   { id: 'oss', name: 'OSS管理', icon: 'cloud' },
   { id: 'httpclient', name: 'HTTP请求', icon: 'send' },
-  { id: 'sqlexpert', name: '分析专家', icon: 'database' }
+  { id: 'sqlexpert', name: '分析专家', icon: 'database' },
+  { id: 'skillscanner', name: 'Skill定制', icon: 'skill' }
 ]
 
 const toolComponents: Record<string, Component> = {
@@ -25,6 +26,7 @@ const toolComponents: Record<string, Component> = {
   oss: defineAsyncComponent(() => import('./views/oss/OssManager.vue')),
   httpclient: defineAsyncComponent(() => import('./views/httpclient/HttpClient.vue')),
   sqlexpert: defineAsyncComponent(() => import('./views/sqlexpert/SqlExpert.vue')),
+  skillscanner: defineAsyncComponent(() => import('./views/skillscanner/SkillScanner.vue')),
   settings: defineAsyncComponent(() => import('./views/settings/Settings.vue'))
 }
 

@@ -371,6 +371,84 @@ interface SqlExpertAPI {
   removeAiListeners: () => void
 }
 
+// ============ Skill 定制相关类型 ============
+
+interface SkillEntry {
+  id: string
+  name: string
+  source: {
+    mapperFile: string
+    mapperMethod: string
+    serviceFile: string
+    serviceMethod: string
+    serviceComment: string
+  }
+  sql: string
+  tables: string[]
+  joinPatterns: string[]
+  tags: string[]
+  isValid: boolean
+  invalidReason: string
+}
+
+interface SkillFile {
+  version: string
+  projectName: string
+  scanTime: string
+  dbSchema: string
+  sourcePath: string
+  skillCount: number
+  skills: SkillEntry[]
+}
+
+interface SkillScannerAPI {
+  selectDirectory: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>
+  scanProject: (payload: { projectPath: string; schemaTableNames?: string[] }) => Promise<{
+    success: boolean
+    projectName?: string
+    mapperFileCount?: number
+    serviceFileCount?: number
+    selectCount?: number
+    serviceMethodCount?: number
+    skillCount?: number
+    validSkillCount?: number
+    invalidSkillCount?: number
+    savePath?: string
+    skillFile?: SkillFile
+    error?: string
+  }>
+  listSkills: () => Promise<{
+    success: boolean
+    files?: Array<{ projectName: string; filePath: string; scanTime: string; skillCount: number }>
+    error?: string
+  }>
+  loadSkill: (payload: { filePath: string }) => Promise<{
+    success: boolean
+    skillFile?: SkillFile
+    error?: string
+  }>
+  deleteSkill: (payload: { filePath: string }) => Promise<{ success: boolean; error?: string }>
+  exportSkill: (payload: { filePath: string; exportDir?: string }) => Promise<{
+    success: boolean
+    exportPath?: string
+    canceled?: boolean
+    error?: string
+  }>
+  importSkill: () => Promise<{
+    success: boolean
+    savePath?: string
+    skillFile?: SkillFile
+    canceled?: boolean
+    error?: string
+  }>
+  exportRules: (payload: { filePath: string; format: 'cursorrules' | 'windsurfrules' | 'markdown' }) => Promise<{
+    success: boolean
+    exportPath?: string
+    canceled?: boolean
+    error?: string
+  }>
+}
+
 interface API {
   window: WindowAPI
   app: AppAPI
@@ -382,6 +460,7 @@ interface API {
   httpClient: HttpClientAPI
   oss: OssAPI
   sqlExpert: SqlExpertAPI
+  skillScanner: SkillScannerAPI
 }
 
 interface CodeRunResult {

@@ -209,6 +209,23 @@ const api = {
       ipcRenderer.removeAllListeners('sql-expert:ai-tool-start')
       ipcRenderer.removeAllListeners('sql-expert:ai-tool-done')
     }
+  },
+
+  // Skill 定制
+  skillScanner: {
+    selectDirectory: () => ipcRenderer.invoke('skill-scanner:select-directory'),
+    scanProject: (payload: { projectPath: string; schemaTableNames?: string[] }) =>
+      ipcRenderer.invoke('skill-scanner:scan-project', payload),
+    listSkills: () => ipcRenderer.invoke('skill-scanner:list-skills'),
+    loadSkill: (payload: { filePath: string }) =>
+      ipcRenderer.invoke('skill-scanner:load-skill', payload),
+    deleteSkill: (payload: { filePath: string }) =>
+      ipcRenderer.invoke('skill-scanner:delete-skill', payload),
+    exportSkill: (payload: { filePath: string; exportDir?: string }) =>
+      ipcRenderer.invoke('skill-scanner:export-skill', payload),
+    importSkill: () => ipcRenderer.invoke('skill-scanner:import-skill'),
+    exportRules: (payload: { filePath: string; format: 'cursorrules' | 'windsurfrules' | 'markdown' }) =>
+      ipcRenderer.invoke('skill-scanner:export-rules', payload)
   }
 }
 

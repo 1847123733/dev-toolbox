@@ -9,6 +9,7 @@ import { setupDockService, closeDockWindow } from './services/dockService'
 import { setupOssManager } from './services/ossManager'
 import { setupHttpClient } from './services/httpClient'
 import { setupSqlExpert } from './services/sqlExpert'
+import { setupSkillScanner } from './services/skillScanner'
 import { notify } from './services/notification'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const AutoLaunch = require('auto-launch')
@@ -425,6 +426,7 @@ if (!gotTheLock) {
     setupOssManager()
     setupHttpClient()
     setupSqlExpert()
+    setupSkillScanner()
 
     createWindow()
 
